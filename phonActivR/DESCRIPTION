@@ -1,0 +1,42 @@
+Package: phonActivR
+Type: Package
+Title: A Lightweight Interactive Activation Simulator for Modeling Cross-Linguistic
+    Phonological Competition in Spoken Word Recognition
+Version: 0.1.0
+Date: 2026-03-13
+Authors@R: c(
+    person("Yu-Cheng", "Lin", email = "yucheng.lin@utrgv.edu", role = c("aut", "cre"),
+           comment = c(ORCID = "0000-0002-5905-6928")),
+    person("Hitomi", "Kambara", role = "aut",
+           comment = c(ORCID = "0000-0001-5302-1305"))
+  )
+Description: A pure-R implementation of a TRACE-style interactive activation model
+    for generating predictions about phonological competition in spoken word
+    recognition. Introduces the delta parameter, which operationalizes cross-linguistic
+    prosodic processing constraints (moraic, syllabic, tonal) as temporal delays on
+    sub-unit activation. Supports item-level simulation across full experimental
+    stimulus sets with automatic phonological overlap computation from the TRACE
+    7-feature phoneme matrix. Includes paradigm-agnostic empirical overlay functions
+    for normalizing and superimposing model predictions onto time-course data from
+    mouse-tracking, eye-tracking, ERP, or any paradigm producing a time-varying
+    competition measure. Designed for cross-linguistic and bilingual spoken word
+    recognition research.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 7.3.2
+Depends: R (>= 4.0.0)
+Imports:
+    ggplot2 (>= 3.4.0),
+    dplyr (>= 1.1.0),
+    patchwork (>= 1.1.0),
+    cli (>= 3.6.0),
+    rlang (>= 1.1.0),
+    stats
+Suggests:
+    testthat (>= 3.0.0),
+    knitr,
+    rmarkdown
+VignetteBuilder: knitr
+URL: https://github.com/YOURUSERNAME/phonActivR
+BugReports: https://github.com/YOURUSERNAME/phonActivR/issues

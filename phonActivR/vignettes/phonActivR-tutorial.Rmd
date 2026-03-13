@@ -1,0 +1,208 @@
+---
+title: "phonActivR: Complete Tutorial"
+author: "[FILL IN: Your Name]"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{phonActivR: Complete Tutorial}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 10,
+  fig.height = 6,
+  dpi = 150
+)
+set.seed(1234)  # Ensures reproducible synthetic data across sessions
+```
+
+## Installation
+
+`phonActivR` requires R (>= 4.0.0) and is installed from GitHub using the
+`devtools` package. In your R console or RStudio terminal, run:
+
+```{r install, eval=FALSE}
+# Install devtools if not already present
+install.packages("devtools")
+
+# Install phonActivR from GitHub
+devtools::install_github("YOURUSERNAME/phonActivR")
+
+# Load for the current session
+library(phonActivR)
+```
+
+The package will automatically install its dependencies (`ggplot2`, `dplyr`,
+`patchwork`, `cli`, `rlang`). No Java, no Python, no external configuration is
+required.
+
+## Overview
+
+This vignette demonstrates the complete `phonActivR` workflow, from stimulus
+specification through simulation, visualization, and empirical overlay, using
+the built-in Japanese–English bilingual stimulus set as a worked example.
+
+## Step 1: Load Package and Example Stimuli
+
+```{r load}
+library(phonActivR)
+
+# Load built-in 42-item stimulus set
+stim <- example_stimuli_jp()
+stim
+```
+
+## Step 2: Run Simulation
+
+```{r simulate}
+sim <- run_simulation(stim, delta_values = c(0, 10, 20, 30))
+summary(sim)
+```
+
+## Step 3: Visualize Predictions
+
+### Competition Effect Curves
+
+```{r fig1, fig.width=14, fig.height=6.5}
+plot_competition(sim)
+```
+
+### Asymmetry Gradient
+
+```{r fig2, fig.width=12, fig.height=6.5}
+plot_asymmetry(sim)
+```
+
+### Onset Timing
+
+```{r fig3, fig.width=11, fig.height=6.5}
+plot_onset_timing(sim, mean_trial_ms = 1500)
+```
+
+## Step 4: Overlay Empirical Data
+
+`example_empirical()` is the **recommended starting point** — it generates
+realistic synthetic curves that run identically to real data, so you can
+execute every line without external dependencies. Once you understand the
+workflow, substitute your own data.frame (same columns, no other changes).
+
+Note that `true_delta` encodes a specific competing hypothesis:
+`true_delta = 0` is the universalist prediction; `true_delta > 0` is the
+Language-Specific Grain Size hypothesis. Specifying this before data collection
+constitutes quantitative pre-registration of the expected temporal effect
+structure (cf. Henninger et al., 2025; BRM TOP Guidelines Level 2).
+
+### Mouse-Tracking Example (Primary Demo Path)
+
+```{r overlay_mt, fig.width=12, fig.height=6.5}
+emp_mt <- example_empirical(sim, true_delta = 15,
+  group_labels = c("JP bilinguals", "EN monolinguals"),
+  paradigm = "mouse-tracking")
+
+overlay_empirical(sim, emp_mt,
+  group_colors = c("JP bilinguals" = "black",
+                   "EN monolinguals" = "grey50"),
+  title = "Mouse-Tracking: Predicted and Empirical CV-C Asymmetry")
+```
+
+### Eye-Tracking Example (Primary Demo Path — second paradigm)
+
+```{r overlay_et, fig.width=12, fig.height=6.5}
+emp_et <- example_empirical(sim, true_delta = 12,
+  group_labels = c("L2 learners", "L1 controls"),
+  paradigm = "eye-tracking", noise_sd = 0.02, seed = 99)
+
+overlay_empirical(sim, emp_et,
+  group_colors = c("L2 learners" = "black",
+                   "L1 controls" = "grey50"),
+  title = "Eye-Tracking: Predicted and Empirical CV-C Asymmetry")
+```
+
+## Step 5: Export Results
+
+```{r export, eval=FALSE}
+export_results(sim, prefix = "moraic_sim", dir = "output/")
+```
+
+## Using Your Own Data (The Researcher's End Goal)
+
+Replace the synthetic data with your actual GAMM smooth estimates.
+The call to `overlay_empirical()` is **identical** — only the `emp` object changes:
+
+```{r own_data, eval=FALSE}
+# From your GAMM analysis
+gamm_data <- read.csv("Combined_smooth_data.csv")
+
+jp <- gamm_data[gamm_data$group == "JP", ]
+en <- gamm_data[gamm_data$group == "EN", ]
+
+emp_real <- data.frame(
+  time      = rep(1:101, 2),
+  asymmetry = c(jp$CV_effect - jp$C_effect,
+                en$CV_effect - en$C_effect),
+  se        = c(sqrt(jp$CV_se^2 + jp$C_se^2),
+                sqrt(en$CV_se^2 + en$C_se^2)),
+  group     = rep(c("JP bilinguals", "EN monolinguals"), each = 101)
+)
+
+overlay_empirical(sim, emp_real)
+```
+
+## Parameter Sensitivity
+
+```{r sensitivity, fig.width=12, fig.height=5}
+gammas <- c(0.02, 0.04, 0.06)
+sims <- lapply(gammas, function(g) {
+  run_simulation(stim, gamma = g, verbose = FALSE)
+})
+
+# Compare: asymmetry gradient shape is robust to gamma
+library(patchwork)
+plots <- lapply(seq_along(gammas), function(i) {
+  plot_asymmetry(sims[[i]],
+    title = paste0("gamma = ", gammas[i]))
+})
+plots[[1]] + plots[[2]] + plots[[3]]
+```
+
+## Power Guidance and Study Planning
+
+Before collecting data, use `power_guidance()` to assess whether your design
+is capable of discriminating between competing delta hypotheses. The
+`max_asymmetry` column in `summary(sim)` provides the expected peak effect
+size at each delta value — use these to inform power calculations.
+
+```{r power, eval=FALSE}
+# How separable are delta = 0 (universalist) and delta = 30 (strong constraint)?
+power_guidance(sim, n_items = 42, n_participants = 24)
+```
+
+**Interpretation (four-level failure framework, You & Magnuson 2018):**
+
+A failure to find the expected delta difference in your empirical data can
+arise at four levels:
+
+1. **Theory level** — the Language-Specific Grain Size hypothesis is wrong
+2. **Implementation level** — phonActivR's equations misrepresent the theory
+3. **Parameter level** — the default alpha/gamma/decay do not apply to your population
+4. **Linking-hypothesis level** — your paradigm does not map cleanly onto the competition-effect quantity
+
+Run the sensitivity analysis (see Parameter Sensitivity section above) to probe
+levels 3 and 4 before interpreting a null result as evidence against level 1.
+
+## Pre-Registration Workflow
+
+Generating delta prediction curves *before* data collection is a form of
+**quantitative pre-registration** of effect structure. Unlike a conventional
+directional pre-registration ("we predict a CV advantage"), this specifies
+the *temporal shape* of the expected competition asymmetry at a particular
+delta value. Steps:
+
+1. Run `run_simulation()` on your planned stimulus set
+2. Use `power_guidance()` to confirm your design can discriminate the target delta values
+3. Register the `sim` object (or the exported CSV from `export_results()`) on OSF before data collection
+4. After data collection, overlay with `overlay_empirical()` and report the best-fitting delta value
