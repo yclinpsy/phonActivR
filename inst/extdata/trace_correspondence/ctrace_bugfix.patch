@@ -1,0 +1,50 @@
+--- util2.c.bak	2026-09-27 03:39:20.553834532 +0000
++++ util2.c	2026-09-27 03:48:10.782378119 +0000
+@@ -10,11 +10,22 @@
+     register int i,j,f,k;
+ 	int _ninputs;
+     char *p;
++	/* GUARD (2026, Lin & Kambara): when -i is parsed on the command line,
++	   main() has not yet called initialize(), so phonptr[] is still NULL
++	   and computing the input dereferences NULL. Defer to the
++	   post-initialize call in main (if (specflag) inputcomp();). */
++	if (phonptr[(int)phonchar[0]] == 0) return;
+ 	for (_ninputs = 0; _ninputs < MAXITEMS-1 ; ) {
+ 		//printf("%s \t",inspec[_ninputs]);
+ 		_ninputs++;
+ 	}
+-	for (i = 0; i < FSLICES; i++) {
++	/* BUGFIX (2026, Lin & Kambara): this zeroing loop, added in the 2005
++	   modification, ran to FSLICES although infet[] is dimensioned
++	   [MAXITEMS][NCONTINS][NFVALS]. With FSLICES > MAXITEMS it overflowed
++	   infet[] and smashed the adjacent global ninputs to 0, so every input
++	   specification was erased before use and all simulations stayed at
++	   resting level. Corrected bound: MAXITEMS. */
++	for (i = 0; i < MAXITEMS; i++) {
+ 		for (j = 0; j < NCONTINS; j++)  {
+ 			for (f = 0; f < NFVALS; f++) {
+ 			infet[i][j][f] = 0;
+--- command.c.bak	2026-09-27 03:41:45.949503654 +0000
++++ command.c	2026-09-27 03:48:10.782491662 +0000
+@@ -48,6 +48,21 @@
+ 		if(in[0] == 'n') continue;
+ 		coartflag = 1 - coartflag;
+ 	}
++	else if (startsame(in,"wmax")) {
++		/* ADDED (2026, Lin & Kambara): machine-readable probe for batch
++		   scripting. Prints the maximum activation over all alignment
++		   tokens of one word at the current cycle, full float precision:
++		   WMAX <cycleno> <word> <maxact>                       */
++		WORD **wptr, *wp; int wi; float wm;
++		fscanf(infp,"%s",in);
++		wp = 0;
++		for ALLWORDPTRS { if (strcmp((*wptr)->sound,in) == 0) { wp = *wptr; break; } }
++		if (wp) {
++			wm = wp->ex[0];
++			for (wi = 1; wi < PSLICES; wi++) if (wp->ex[wi] > wm) wm = wp->ex[wi];
++			printf("WMAX %d %s %.6f\n", cycleno, in, wm);
++		} else printf("WMAX %d %s NA\n", cycleno, in);
++	}
+ 	else if (startsame(in,"rc")) {
+ 		printf("reset and cycle\n");
+ 		zarrays();

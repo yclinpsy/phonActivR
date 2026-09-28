@@ -27,7 +27,9 @@
 #'     \item{summary}{Data frame with peak asymmetry and curve ordering
 #'       for each parameter combination and delta value}
 #'     \item{robust}{Logical. TRUE if the delta ordering (asymmetry gradient)
-#'       is preserved across all parameter combinations}
+#'       is never reversed (non-decreasing) across all parameter
+#'       combinations; exact ties under saturating regimes still count as
+#'       robust and are reported separately in the console output}
 #'   }
 #' @export
 #' @examples
@@ -99,8 +101,13 @@ sensitivity_analysis <- function(stimuli,
 
   summary_df <- dplyr::bind_rows(summary_rows)
 
-  # Check robustness: does the ordering of delta curves hold everywhere?
+  # Check robustness: the delta ordering must never reverse (non-decreasing
+  # peak asymmetry with increasing delta) in any parameter combination.
+  # Exact ties are allowed and counted separately: under saturating regimes
+  # (e.g., low alpha and/or high gamma) the peak asymmetry hits a
+  # parameter-determined bound and delta leaves it unchanged.
   robust <- TRUE
+  n_tied <- 0L
   for (i in seq_len(nrow(grid))) {
     sub <- summary_df[summary_df$grid_row == i, ]
     sub <- sub[order(sub$delta), ]
@@ -108,17 +115,25 @@ sensitivity_analysis <- function(stimuli,
       robust <- FALSE
       break
     }
+    if (max(sub$peak_asym) - min(sub$peak_asym) < 1e-9) {
+      n_tied <- n_tied + 1L
+    }
   }
 
   if (verbose) {
     cli::cli_h1("Sensitivity Analysis Complete")
     if (robust) {
       cli::cli_alert_success(
-        "Asymmetry gradient ordering is PRESERVED across all {nrow(grid)} parameter combinations."
+        "Asymmetry gradient ordering is never reversed (non-decreasing) across all {nrow(grid)} parameter combinations."
       )
+      if (n_tied > 0) {
+        cli::cli_alert_info(
+          "{n_tied} combination{?s} show{?s/} exact ties (saturated peak asymmetry): adjacent delta models are not discriminable by peak asymmetry there."
+        )
+      }
     } else {
       cli::cli_alert_warning(
-        "Asymmetry gradient ordering is NOT preserved in all combinations."
+        "Asymmetry gradient ordering REVERSES in at least one combination."
       )
     }
   }
@@ -274,16 +289,22 @@ parameter_recovery <- function(sim,
 }
 
 
-#' Cohort and Rhyme Benchmark (Qualitative TRACE Sanity Check)
+#' Cohort and Rhyme Benchmark (Qualitative Interactive-Activation Checks)
 #'
-#' Verifies that phonActivR reproduces two core properties of TRACE-style
-#' interactive activation: (1) the cohort effect---words sharing onset segments
-#' produce stronger competition than unrelated words; and (2) the rhyme
-#' effect---onset competitors produce stronger competition than rhyme
-#' competitors, as expected from the left-to-right processing priority in
-#' TRACE. Also verifies the delta gating logic: at very high delta,
-#' sub-moraic competitor activation should be near zero until the gating
-#' period ends.
+#' Verifies that phonActivR reproduces the core qualitative competition
+#' phenomena that define the interactive-activation family and that were
+#' established for TRACE (McClelland & Elman, 1986) and confirmed
+#' empirically in the visual world paradigm (Allopenna et al., 1998):
+#' (1) the \emph{cohort effect} -- words sharing onset segments produce
+#' stronger competition than unrelated words; (2) \emph{onset priority} --
+#' onset (cohort) competitors produce stronger competition than rhyme
+#' competitors, as expected from left-to-right incremental processing;
+#' (3) the \emph{rhyme time-course} -- rhyme competition emerges and peaks
+#' later than cohort competition, mirroring the late rise of rhyme-competitor
+#' fixations in Allopenna et al. (1998); and (4) \emph{target resolution} --
+#' the target ends the trial with higher activation than any competitor.
+#' Also verifies the delta gating logic: at very high delta, sub-prosodic
+#' competitor activation should be exactly zero until the gating period ends.
 #'
 #' @param delta_logic_value Integer. A high delta value to test gating
 #'   behaviour (default: 50).
@@ -293,11 +314,19 @@ parameter_recovery <- function(sim,
 #'   \describe{
 #'     \item{cohort_gt_unrelated}{Logical. Cohort competition > unrelated?}
 #'     \item{cohort_gt_rhyme}{Logical. Cohort competition > rhyme competition?}
-#'     \item{delta_gating_correct}{Logical. At high delta, sub-moraic
+#'     \item{rhyme_peaks_later}{Logical. Rhyme competition peaks later than
+#'       cohort competition?}
+#'     \item{target_wins}{Logical. Target activation ends above all
+#'       competitors?}
+#'     \item{delta_gating_correct}{Logical. At high delta, sub-prosodic
 #'       activation = 0 until the gating period ends?}
-#'     \item{all_pass}{Logical. All three checks passed?}
+#'     \item{all_pass}{Logical. All checks passed?}
 #'     \item{details}{Data frame with numerical results}
 #'   }
+#' @references
+#' Allopenna, P. D., Magnuson, J. S., & Tanenhaus, M. K. (1998). Tracking the
+#' time course of spoken word recognition using eye movements. \emph{Journal
+#' of Memory and Language}, 38(4), 419--439.
 #' @export
 #' @examples
 #' bench <- cohort_rhyme_benchmark()
@@ -343,8 +372,23 @@ cohort_rhyme_benchmark <- function(delta_logic_value = 50L,
   peak_rhyme      <- max(rhyme_out$competition_effect)
   peak_unrelated  <- max(unrelated_out$competition_effect)
 
+  # Check 1-2: competition magnitude ordering (cohort > rhyme > unrelated)
   cohort_gt_unrelated <- peak_cohort > peak_unrelated
   cohort_gt_rhyme     <- peak_cohort > peak_rhyme
+
+  # Check 3: rhyme competition should PEAK LATER than cohort competition,
+  # mirroring the late rise of rhyme-competitor fixations in Allopenna et
+  # al. (1998, Figure 4) and TRACE's left-to-right activation dynamics.
+  t_peak_cohort <- which.max(cohort_out$competition_effect)
+  t_peak_rhyme  <- which.max(rhyme_out$competition_effect)
+  rhyme_peaks_later <- t_peak_rhyme > t_peak_cohort
+
+  # Check 4: lexical selection -- by the end of the trial the target should
+  # have out-competed both competitor types (interactive activation resolves
+  # toward the best-matching candidate).
+  end_t <- nrow(cohort_out)
+  target_wins <- (cohort_out$act_target[end_t] > cohort_out$act_comp[end_t]) &&
+    (rhyme_out$act_target[end_t] > rhyme_out$act_comp[end_t])
 
   # --- Delta gating logic test ---
   # At very high delta, sub-moraic competitor should have zero activation
@@ -359,18 +403,24 @@ cohort_rhyme_benchmark <- function(delta_logic_value = 50L,
   pre_gate <- gated_out$act_comp[seq_len(delta_logic_value)]
   delta_gating_correct <- all(pre_gate == 0)
 
-  all_pass <- cohort_gt_unrelated && cohort_gt_rhyme && delta_gating_correct
+  all_pass <- cohort_gt_unrelated && cohort_gt_rhyme && rhyme_peaks_later &&
+    target_wins && delta_gating_correct
 
   details <- data.frame(
-    check = c("Cohort > Unrelated", "Cohort > Rhyme", "Delta gating correct"),
-    result = c(cohort_gt_unrelated, cohort_gt_rhyme, delta_gating_correct),
-    value1 = c(round(peak_cohort, 4), round(peak_cohort, 4),
-               round(max(pre_gate), 6)),
-    value2 = c(round(peak_unrelated, 4), round(peak_rhyme, 4),
-               delta_logic_value),
+    check = c("Cohort > Unrelated", "Cohort > Rhyme", "Rhyme peaks later",
+              "Target wins", "Delta gating correct"),
+    result = c(cohort_gt_unrelated, cohort_gt_rhyme, rhyme_peaks_later,
+               target_wins, delta_gating_correct),
+    value_a = c(round(peak_cohort, 4), round(peak_cohort, 4),
+                t_peak_rhyme,
+                round(cohort_out$act_target[end_t], 4),
+                round(max(pre_gate), 6)),
+    value_b = c(round(peak_unrelated, 4), round(peak_rhyme, 4),
+                t_peak_cohort,
+                round(cohort_out$act_comp[end_t], 4),
+                delta_logic_value),
     stringsAsFactors = FALSE
   )
-  names(details)[3:4] <- c("value_a", "value_b")
 
   if (verbose) {
     cat("\n=== phonActivR Qualitative Benchmark ===\n\n")
@@ -382,7 +432,15 @@ cohort_rhyme_benchmark <- function(delta_logic_value = 50L,
     cat("   Cohort peak =", round(peak_cohort, 4),
         "| Rhyme peak =", round(peak_rhyme, 4),
         "->", ifelse(cohort_gt_rhyme, "PASS", "FAIL"), "\n\n")
-    cat("3. Delta gating logic (delta =", delta_logic_value, "):\n")
+    cat("3. Rhyme peaks later than cohort (Allopenna et al., 1998 pattern):\n")
+    cat("   Rhyme peak step =", t_peak_rhyme,
+        "| Cohort peak step =", t_peak_cohort,
+        "->", ifelse(rhyme_peaks_later, "PASS", "FAIL"), "\n\n")
+    cat("4. Target resolution (target ends above competitors):\n")
+    cat("   Target end =", round(cohort_out$act_target[end_t], 4),
+        "| Cohort competitor end =", round(cohort_out$act_comp[end_t], 4),
+        "->", ifelse(target_wins, "PASS", "FAIL"), "\n\n")
+    cat("5. Delta gating logic (delta =", delta_logic_value, "):\n")
     cat("   Max activation before gate:", round(max(pre_gate), 6),
         "->", ifelse(delta_gating_correct, "PASS", "FAIL"), "\n\n")
     cat("Overall:", ifelse(all_pass, "ALL CHECKS PASSED", "SOME CHECKS FAILED"), "\n")
@@ -392,6 +450,8 @@ cohort_rhyme_benchmark <- function(delta_logic_value = 50L,
     list(
       cohort_gt_unrelated  = cohort_gt_unrelated,
       cohort_gt_rhyme      = cohort_gt_rhyme,
+      rhyme_peaks_later    = rhyme_peaks_later,
+      target_wins          = target_wins,
       delta_gating_correct = delta_gating_correct,
       all_pass             = all_pass,
       details              = details
@@ -406,71 +466,139 @@ cohort_rhyme_benchmark <- function(delta_logic_value = 50L,
 #' Compares the fit of a universalist model (delta = 0) against each non-zero
 #' delta model using residual sum of squares (RSS) and the Akaike Information
 #' Criterion (AIC). This provides a formal statistical framework for selecting
-#' the best-fitting prosodic constraint hypothesis.
+#' the best-fitting prosodic constraint hypothesis, replacing visual
+#' "eyeballing" of the overlay figure with a quantitative model-selection
+#' procedure. It is Step 6b of the recommended workflow: run it on the same
+#' empirical data passed to \code{\link{overlay_empirical}} (or simply set
+#' \code{fit = TRUE} in \code{overlay_empirical()}, which calls this function
+#' internally).
+#'
+#' @section Analysis window:
+#' The delta estimate can depend on the analysis window the researcher chose
+#' when extracting the empirical curve (e.g., eye-tracking analyses often
+#' start 200 ms after word onset, whereas mouse-tracking includes motor
+#' planning time). Use \code{time_window} to restrict the fit to a sub-window
+#' and check that the selected delta is robust to reasonable window choices.
+#' Because window conventions differ across paradigms, best-fitting delta
+#' values are most safely compared \emph{within} a paradigm; see the tutorial
+#' section "Analysis Windows and Cross-Paradigm Comparability".
 #'
 #' @param sim A \code{"phonActivR_sim"} object.
 #' @param empirical_data A data.frame with columns \code{time} and
-#'   \code{asymmetry} (a single group's empirical CV-C asymmetry curve).
+#'   \code{asymmetry}. If a \code{group} column is present, the model
+#'   comparison is run separately for each group.
+#' @param time_window Optional numeric vector of length 2,
+#'   \code{c(first, last)}, giving the range of normalized time steps over
+#'   which to compute the fit (default: the full curve).
 #'
-#' @return A data.frame with columns: delta, rss, n_params, aic, delta_aic
-#'   (difference from best model).
+#' @return A data.frame with columns: (\code{group},) \code{delta},
+#'   \code{rss}, \code{n_params}, \code{aic}, \code{delta_aic} (difference
+#'   from the best model within that group). The best-fitting delta per group
+#'   is attached as the \code{"best_delta"} attribute (a named numeric vector).
 #' @export
 #' @examples
 #' stim <- example_stimuli_jp()
 #' sim  <- run_simulation(stim, delta_values = c(0, 10, 20, 30), verbose = FALSE)
 #' emp  <- example_empirical(sim, true_delta = 15)
-#' exp_grp <- emp[emp$group == unique(emp$group)[1], ]
-#' gof  <- goodness_of_fit(sim, exp_grp)
-goodness_of_fit <- function(sim, empirical_data) {
+#' gof  <- goodness_of_fit(sim, emp)          # both groups at once
+#' attr(gof, "best_delta")
+#' gof_win <- goodness_of_fit(sim, emp, time_window = c(21, 101))  # robustness
+goodness_of_fit <- function(sim, empirical_data, time_window = NULL) {
 
   stopifnot(inherits(sim, "phonActivR_sim"))
   stopifnot(is.data.frame(empirical_data))
   stopifnot(all(c("time", "asymmetry") %in% names(empirical_data)))
 
   delta_vals <- sim$params$delta_values
-  n <- nrow(empirical_data)
 
-  rows <- list()
-  for (d in delta_vals) {
-    sim_asym <- sim$results[[as.character(d)]]$asymmetry
-    # Normalize empirical to simulation scale
-    sim_max <- max(sim_asym, na.rm = TRUE)
-    emp_max <- max(abs(empirical_data$asymmetry), na.rm = TRUE)
-    scale_f <- if (emp_max > 0) sim_max / emp_max else 1
-    emp_scaled <- empirical_data$asymmetry * scale_f
+  # If no group column is present, treat the input as a single group so the
+  # same code path handles both cases.
+  if (!"group" %in% names(empirical_data)) {
+    empirical_data$group <- "Empirical"
+  }
+  groups <- unique(empirical_data$group)
 
-    rss <- sum((emp_scaled - sim_asym)^2)
-    # k = 1 for delta=0 (baseline), k = 2 for delta>0 (adds delta param)
-    k <- if (d == 0) 1L else 2L
-    aic <- n * log(rss / n) + 2 * k
-
-    rows[[length(rows) + 1]] <- data.frame(
-      delta    = d,
-      rss      = round(rss, 6),
-      n_params = k,
-      aic      = round(aic, 2),
-      stringsAsFactors = FALSE
-    )
+  # Validate the optional analysis window
+  if (!is.null(time_window)) {
+    stopifnot(length(time_window) == 2, time_window[1] < time_window[2])
   }
 
-  result <- dplyr::bind_rows(rows)
-  result$delta_aic <- round(result$aic - min(result$aic), 2)
+  all_rows  <- list()
+  best_by_g <- stats::setNames(numeric(0), character(0))
+
+  for (g in groups) {
+    gd <- empirical_data[empirical_data$group == g, ]
+    gd <- gd[order(gd$time), ]
+
+    # Restrict both the empirical curve and the simulated curves to the
+    # requested analysis window (if any).
+    keep_t <- if (is.null(time_window)) gd$time else
+      gd$time[gd$time >= time_window[1] & gd$time <= time_window[2]]
+    gd <- gd[gd$time %in% keep_t, ]
+    n  <- nrow(gd)
+
+    rows <- list()
+    for (d in delta_vals) {
+      sim_asym <- sim$results[[as.character(d)]]$asymmetry[gd$time]
+
+      # Normalize the empirical curve to the simulation's activation scale
+      # (peak-to-peak), preserving its temporal shape. The same scaling is
+      # used by overlay_empirical(), so the visual overlay and the formal
+      # fit are directly comparable.
+      sim_max <- max(sim_asym, na.rm = TRUE)
+      emp_max <- max(abs(gd$asymmetry), na.rm = TRUE)
+      scale_f <- if (emp_max > 0) sim_max / emp_max else 1
+      emp_scaled <- gd$asymmetry * scale_f
+
+      # Residual sum of squares between the scaled empirical curve and the
+      # simulated curve for this delta.
+      rss <- sum((emp_scaled - sim_asym)^2)
+      # Parameter count for AIC: the universalist model (delta = 0) has
+      # k = 1 (scale only); each delta > 0 model adds the delta parameter.
+      k <- if (d == 0) 1L else 2L
+      aic <- n * log(rss / n) + 2 * k
+
+      rows[[length(rows) + 1]] <- data.frame(
+        group    = g,
+        delta    = d,
+        rss      = round(rss, 6),
+        n_params = k,
+        aic      = round(aic, 2),
+        stringsAsFactors = FALSE
+      )
+    }
+
+    gres <- dplyr::bind_rows(rows)
+    gres$delta_aic <- round(gres$aic - min(gres$aic), 2)
+    best_by_g[g] <- gres$delta[which.min(gres$aic)]
+    all_rows[[g]] <- gres
+  }
+
+  result <- dplyr::bind_rows(all_rows)
 
   cat("\n=== phonActivR Goodness-of-Fit ===\n")
-  cat("Comparing", length(delta_vals), "models (n =", n, "time points)\n\n")
-  print(result, row.names = FALSE)
-  cat("\nBest model: delta =", result$delta[which.min(result$aic)],
-      "(lowest AIC)\n")
-  cat("Models with delta_AIC > 10 have essentially no support.\n")
+  if (!is.null(time_window)) {
+    cat("Analysis window: time steps", time_window[1], "to", time_window[2], "\n")
+  }
+  for (g in groups) {
+    gres <- result[result$group == g, ]
+    cat("\nGroup:", g, "(n =", sum(result$group == g), "models)\n")
+    print(gres[, setdiff(names(gres), "group")], row.names = FALSE)
+    cat("Best model: delta =", best_by_g[g], "(lowest AIC)\n")
+  }
+  cat("\nModels with delta_AIC > 10 have essentially no support (Burnham & Anderson).\n")
+  cat("Report the best-fitting delta together with the delta_AIC table, and\n")
+  cat("check robustness to the analysis window via the time_window argument.\n")
 
+  attr(result, "best_delta") <- best_by_g
   invisible(result)
 }
 
 
 #' Compare Grain-Size Profiles Across Two Language Groups
 #'
-#' Takes two \code{"phonActivR_sim"} objects (e.g., one for Japanese–English
-#' bilinguals, one for Chinese–English bilinguals) and produces a side-by-side
+#' Takes two \code{"phonActivR_sim"} objects (e.g., one for Japanese-English
+#' bilinguals, one for Chinese-English bilinguals) and produces a side-by-side
 #' comparison of their predicted asymmetry gradients. This enables researchers
 #' to ask: do two L1 groups show the same or different prosodic constraint
 #' profiles?
@@ -481,12 +609,14 @@ goodness_of_fit <- function(sim, empirical_data) {
 #' @param label_b Character. Label for Group B (default: "Group B").
 #' @param delta_colors Named character vector for delta curve colors.
 #'   Auto-generated if \code{NULL}.
-#' @param title Character. Plot title.
+#' @param title Character. Optional overall title. If \code{NULL} (the
+#'   default) no overall title is drawn; the per-panel group labels remain.
 #'
 #' @return A list with components:
 #'   \describe{
 #'     \item{plot}{A patchwork ggplot2 object showing side-by-side asymmetry
-#'       gradients with a shared legend}
+#'       gradients; each panel carries its own delta legend when the two
+#'       groups are simulated over different delta grids}
 #'     \item{comparison}{Data frame comparing peak asymmetry, onset delay,
 #'       and best-fitting delta for each group}
 #'   }
@@ -514,23 +644,19 @@ compare_languages <- function(sim_a, sim_b,
   p_b <- plot_asymmetry(sim_b, delta_colors = delta_colors,
                          title = label_b)
 
-  combined_plot <- p_a + p_b +
-    patchwork::plot_layout(guides = "collect") +
-    patchwork::plot_annotation(
-      title = title %||% "Cross-Linguistic Grain-Size Comparison",
-      subtitle = paste0(
-        label_a, " (", sim_a$stimuli$large_type, " vs ",
-        sim_a$stimuli$small_type, ", ",
-        length(sim_a$params$delta_values), " \u03b4 values) | ",
-        label_b, " (", sim_b$stimuli$large_type, " vs ",
-        sim_b$stimuli$small_type, ", ",
-        length(sim_b$params$delta_values), " \u03b4 values)"
-      ),
+  # Panel titles (label_a / label_b) identify the two groups and are kept;
+  # no overall title/subtitle is baked into the image (that text belongs in
+  # the figure caption). A user-supplied title is honored. Each panel keeps
+  # its own delta legend because the two groups may use different delta grids.
+  combined_plot <- p_a + p_b
+  if (!is.null(title)) {
+    combined_plot <- combined_plot + patchwork::plot_annotation(
+      title = title,
       theme = ggplot2::theme(
-        plot.title    = ggplot2::element_text(size = 14, face = "bold"),
-        plot.subtitle = ggplot2::element_text(size = 9.5, color = "gray40")
+        plot.title = ggplot2::element_text(size = 14, face = "bold")
       )
     )
+  }
 
   # --- Summary comparison table ---
   summarise_sim <- function(sim, label) {
@@ -561,10 +687,18 @@ compare_languages <- function(sim_a, sim_b,
 
   cat("\n=== Cross-Linguistic Comparison ===\n\n")
   print(comparison, row.names = FALSE)
-  cat("\nInterpretation: If the two groups show different delta_at_peak values,\n")
-  cat("this suggests different L1 prosodic constraint strengths. If they show\n")
-  cat("the same peak delta, the prosodic bottleneck may be similar in magnitude\n")
-  cat("despite originating from different L1 grain sizes (mora vs. syllable).\n")
+  cat("\nInterpretation: Because simulated peak asymmetry increases with delta,\n")
+  cat("delta_at_peak necessarily equals the largest delta in each group's grid\n")
+  cat("(it is a property of the simulation design, not a finding). To compare\n")
+  cat("prosodic constraint strengths across groups, fit each group's EMPIRICAL\n")
+  cat("data with goodness_of_fit() and compare the best-fitting delta values.\n")
+  cat("\nComparability caveat: delta is expressed in normalized time steps\n")
+  cat("(% of trial), and the linguistic unit it indexes differs by group\n")
+  cat("(e.g., mora vs. syllable). Numeric delta values are therefore directly\n")
+  cat("comparable only when the two groups were tested in the same paradigm\n")
+  cat("with comparable trial durations and analysis windows. Across paradigms,\n")
+  cat("compare each group's delta AGAINST ITS OWN delta = 0 baseline (i.e.,\n")
+  cat("the presence and relative strength of a constraint), not raw values.\n")
 
   invisible(list(
     plot       = combined_plot,

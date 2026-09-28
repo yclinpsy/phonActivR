@@ -1,4 +1,21 @@
 # =============================================================================
+# ARCHIVAL NOTE (added with package v0.2.0)
+# -----------------------------------------------------------------------------
+# This script is preserved EXACTLY as originally run for the empirical study,
+# for independent verification of computational equivalence. Its comments and
+# terminology PREDATE the v0.2.0 reframing: where this file says "TRACE-style
+# interactive activation", "TRACE 7-feature phoneme matrix", or
+# "Language-Specific Grain Size Hypothesis", the current package documentation
+# and the accompanying tutorial instead describe (a) a compact, bounded
+# lateral-inhibition competition network in the interactive-activation family
+# (not TRACE), (b) a binary adaptation of the McClelland-Elman (1986) feature
+# dimensions constructed by the authors, and (c) the language-specific
+# listening proposal of Cutler and Otake (1994), for which "grain-size
+# hypothesis" is our label. Do not cite this file's terminology; see the
+# tutorial and NEWS.md.
+# =============================================================================
+
+# =============================================================================
 # ITEM-LEVEL PHONEME FEATURE SIMULATION
 # Purpose-built lexical activation competition model
 # =============================================================================
@@ -23,6 +40,8 @@
 #   3. Ctrl+Shift+S  (Source — runs everything)
 #
 # ── OUTPUT FILES ──────────────────────────────────────────────────────────────
+#   (The three PNGs below are OUTPUTS of this script, written to the working
+#   directory when it is run; they are not shipped with the package.)
 #   Figure1_competition_effects.png  — Model predictions: CV vs C curves under
 #                                      each hypothesis (δ=0 and δ=20)
 #                                      → MAIN TEXT (Methods or Results)

@@ -68,7 +68,7 @@ create_stimuli <- function(targets, large_comp, large_ctrl,
       "Missing onset transcriptions for {length(missing)} word(s): {paste(missing, collapse = ', ')}. These will use default overlap = 0.3."
     )
   } else {
-    cli::cli_alert_success("All {length(all_words)} words verified: onset transcriptions complete.")
+    cli::cli_alert_success("All {length(all_words)} unique words across the {n} items verified: onset transcriptions complete.")
   }
 
   items <- data.frame(
@@ -111,6 +111,14 @@ create_stimuli <- function(targets, large_comp, large_ctrl,
 #' @param decay Numeric. Passive decay rate (default: 0.02).
 #' @param threshold Numeric. Competition onset detection threshold (default: 0.04).
 #' @param ctrl_scaling Numeric. Control word overlap scaling factor (default: 0.15).
+#' @param features Feature matrix used for phoneme similarity
+#'   (default \code{trace_features()}). Supply a custom named list of feature
+#'   vectors for languages whose phonemes are not in the built-in English set.
+#' @param similarity_matrix Optional. A symmetric matrix of direct pairwise
+#'   phoneme similarities built with \code{\link{custom_similarity}}; entries
+#'   in this matrix take precedence over the feature-based computation. This
+#'   is the recommended route for cross-linguistic stimulus sets containing
+#'   phonemes outside the built-in feature matrix.
 #' @param verbose Logical. Print progress messages (default: TRUE).
 #' @param seed Integer or NULL. Random seed for reproducibility (default: NULL).
 #'   Set to an integer (e.g., \code{seed = 1234}) to produce identical results
@@ -142,6 +150,8 @@ run_simulation <- function(stimuli,
                            decay        = 0.02,
                            threshold    = 0.04,
                            ctrl_scaling = 0.15,
+                           features     = trace_features(),
+                           similarity_matrix = NULL,
                            verbose      = TRUE,
                            seed         = NULL) {
 
@@ -152,6 +162,16 @@ run_simulation <- function(stimuli,
   n_items <- stimuli$n_items
   items   <- stimuli$items
   onsets  <- stimuli$onsets
+
+  # Warn if any stimulus phonemes are outside the active feature/similarity
+  # set: such phonemes would receive the default similarity (0.3) with every
+  # other phoneme, which flattens cross-linguistic similarity structure.
+  # NOTE: warn = TRUE unconditionally (a true R warning), so the fallback can
+  # never operate silently even when verbose = FALSE; only the success
+  # message is tied to verbosity.
+  check_phoneme_coverage(stimuli, features = features,
+                         similarity_matrix = similarity_matrix,
+                         warn = TRUE, announce = verbose)
 
   # Record start time for efficiency reporting
   t_start <- proc.time()[["elapsed"]]
@@ -190,6 +210,8 @@ run_simulation <- function(stimuli,
         small_type       = stimuli$small_type,
         delta            = delta,
         ctrl_scaling     = ctrl_scaling,
+        features         = features,
+        similarity_matrix = similarity_matrix,
         time_steps       = time_steps,
         alpha            = alpha,
         gamma            = gamma,
@@ -327,5 +349,34 @@ print.phonActivR_sim <- function(x, ...) {
       paste(x$params$delta_values, collapse = ","), ")\n", sep = "")
   cat("Use summary() for detailed results, plot_competition() for figures.\n")
   invisible(x)
+}
+
+
+#' @export
+print.phonActivR_stimuli <- function(x, ...) {
+  cat("phonActivR stimuli: ", x$n_items, " items | grain sizes: ",
+      x$large_type, " (large) vs ", x$small_type, " (small)\n", sep = "")
+  cat("Use summary() for the item table, run_simulation() to simulate.\n")
+  invisible(x)
+}
+
+
+#' @export
+summary.phonActivR_stimuli <- function(object, ...) {
+  cat("phonActivR stimulus set\n")
+  cat("  Items:       ", object$n_items, "\n", sep = "")
+  cat("  Large grain: ", object$large_type,
+      " (competitor column: large_comp)\n", sep = "")
+  cat("  Small grain: ", object$small_type,
+      " (competitor column: small_comp)\n", sep = "")
+  cat("  Onset transcriptions: ", length(object$onsets),
+      " words\n\n", sep = "")
+  cat("First items:\n")
+  print(utils::head(object$items, 5), row.names = FALSE)
+  if (object$n_items > 5) {
+    cat("... and ", object$n_items - 5, " more rows (object$items).\n",
+        sep = "")
+  }
+  invisible(object$items)
 }
 

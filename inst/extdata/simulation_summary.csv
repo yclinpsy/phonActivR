@@ -1,0 +1,5 @@
+"Delta_delta","Hypothesis","CV_Onset_pct","C_Onset_pct","Onset_Delay_pct","Max_CV_Effect","Max_C_Effect","Max_CV_minus_C"
+0,"Language-Specific Grain Size",2,3,1,0.571,0.25,0.384
+10,"L1-Transfer",2,13,11,0.571,0.181,0.424
+20,"L1-Transfer",2,24,22,0.571,0.176,0.539
+30,"L1-Transfer",2,35,33,0.571,0.17,0.564

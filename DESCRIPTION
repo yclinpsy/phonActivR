@@ -1,22 +1,31 @@
 Package: phonActivR
 Type: Package
-Title: A Lightweight Interactive Activation Simulator for Modeling Cross-Linguistic
-    Phonological Competition in Spoken Word Recognition
-Version: 0.1.0
-Date: 2026-03-13
+Title: Simulating and Testing Prosodic-Constraint (Delta) Hypotheses in
+    Cross-Linguistic Spoken Word Recognition
+Version: 0.2.0
+Date: 2026-09-26
 Authors@R: c(
     person("Yu-Cheng", "Lin", email = "yucheng.lin@utrgv.edu", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0002-5905-6928")),
     person("Hitomi", "Kambara", role = "aut",
            comment = c(ORCID = "0000-0001-5302-1305"))
   )
-Description: A pure-R implementation of a TRACE-style interactive activation model
-    for generating predictions about phonological competition in spoken word
-    recognition. Introduces the delta parameter, which operationalizes cross-linguistic
-    prosodic processing constraints (moraic, syllabic, tonal) as temporal delays on
-    sub-unit activation. Supports item-level simulation across full experimental
-    stimulus sets with automatic phonological overlap computation from the TRACE
-    7-feature phoneme matrix. Includes paradigm-agnostic empirical overlay functions
+Description: A pure-R implementation of a compact, bounded lateral-inhibition
+    competition model in the interactive-activation family (cf. McClelland &
+    Rumelhart, 1981) for generating qualitative predictions about phonological
+    competition in spoken word recognition. It is not the TRACE model: it omits
+    TRACE's feature and word levels, time-slice reduplication, time-varying input,
+    and top-down feedback, and its parameter defaults are its own. Introduces the
+    delta parameter, which operationalizes cross-linguistic prosodic processing
+    constraints (e.g., moraic,
+    syllabic) as temporal delays on sub-unit
+    activation; delta shifts simulated competition monotonically but its leverage
+    is modest relative to competitor-overlap structure. Supports item-level
+    simulation across full experimental stimulus sets with automatic phonological
+    overlap computation from a binary adaptation, constructed by the package
+    authors, of the seven McClelland-Elman (1986) feature dimensions (the
+    original TRACE II specification is an eight-level continuum over 15
+    phonemes), used here as a similarity metric only. Includes paradigm-agnostic empirical overlay functions
     for normalizing and superimposing model predictions onto time-course data from
     mouse-tracking, eye-tracking, ERP, or any paradigm producing a time-varying
     competition measure. Designed for cross-linguistic and bilingual spoken word
@@ -32,7 +41,8 @@ Imports:
     patchwork (>= 1.1.0),
     cli (>= 3.6.0),
     rlang (>= 1.1.0),
-    stats
+    stats,
+    utils
 Suggests:
     testthat (>= 3.0.0),
     knitr,

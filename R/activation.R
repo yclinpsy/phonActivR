@@ -4,7 +4,7 @@
 
 #' Run Interactive Activation Simulation for a Single Competitor Pair
 #'
-#' Implements TRACE-style interactive activation dynamics for one target word
+#' Implements compact bounded lateral-inhibition competition dynamics (interactive-activation family; not TRACE) for one target word
 #' with one competitor and one control. The model tracks activation of all
 #' three candidates across normalized time steps, applying lateral inhibition
 #' and passive decay at each step.
@@ -50,29 +50,44 @@ run_activation <- function(overlap_comp, overlap_ctrl,
                            max_act = 1.0,
                            min_act = 0.0) {
 
-  act_comp   <- numeric(time_steps)
-  act_ctrl   <- numeric(time_steps)
-  act_target <- numeric(time_steps)
+  # Pre-allocate activation vectors; all candidates start at activation 0.
+  act_comp   <- numeric(time_steps)   # competitor activation a_comp(t)
+  act_ctrl   <- numeric(time_steps)   # control activation a_ctrl(t)
+  act_target <- numeric(time_steps)   # target activation a_target(t)
 
+  # Each pass through this loop applies the discrete-time update equation
+  #   a_i(t) = a_i(t-1)                              [carry-over]
+  #          + alpha * input_i * (max_act - a_i(t-1)) [bounded excitatory growth]
+  #          - gamma * sum_{j != i} a_j(t-1)          [lateral inhibition]
+  #          - decay * a_i(t-1)                       [passive decay]
+  # to each of the three candidates, then clips activation into
+  # [min_act, max_act].
   for (t in 2:time_steps) {
-    # Target word: always mora-aligned, activates from t = 1
+    # --- Target word -------------------------------------------------------
+    # The target matches its own input perfectly, so input_target = 1.0 and
+    # its input is available from the first time step (never gated).
     act_target[t] <- act_target[t-1] +
-      alpha * 1.0 * (max_act - act_target[t-1]) -
-      gamma * act_comp[t-1] -
-      gamma * act_ctrl[t-1] -
-      decay * act_target[t-1]
-    act_target[t] <- max(min_act, min(max_act, act_target[t]))
+      alpha * 1.0 * (max_act - act_target[t-1]) -   # excitatory growth toward ceiling
+      gamma * act_comp[t-1] -                        # inhibition from competitor
+      gamma * act_ctrl[t-1] -                        # inhibition from control
+      decay * act_target[t-1]                        # passive decay
+    act_target[t] <- max(min_act, min(max_act, act_target[t]))  # clip to bounds
 
-    # Competitor: input gated by prosodic constraint
+    # --- Competitor --------------------------------------------------------
+    # The competitor's input is gated by the prosodic constraint: before
+    # time step `overlap_onset` its input is 0 (a hard temporal gate); from
+    # `overlap_onset` onward, the full overlap value applies.
     inp_comp <- ifelse(t >= overlap_onset, overlap_comp, 0.0)
     act_comp[t] <- act_comp[t-1] +
-      alpha * inp_comp * (max_act - act_comp[t-1]) -
-      gamma * act_target[t-1] -
-      gamma * act_ctrl[t-1] -
-      decay * act_comp[t-1]
+      alpha * inp_comp * (max_act - act_comp[t-1]) - # gated excitatory growth
+      gamma * act_target[t-1] -                      # inhibition from target
+      gamma * act_ctrl[t-1] -                        # inhibition from control
+      decay * act_comp[t-1]                          # passive decay
     act_comp[t] <- max(min_act, min(max_act, act_comp[t]))
 
-    # Control word: minimal overlap, never delayed
+    # --- Control word ------------------------------------------------------
+    # The control has minimal overlap with the input and is never delayed;
+    # it provides the baseline against which competition is measured.
     act_ctrl[t] <- act_ctrl[t-1] +
       alpha * overlap_ctrl * (max_act - act_ctrl[t-1]) -
       gamma * act_target[t-1] -
@@ -108,6 +123,11 @@ run_activation <- function(overlap_comp, overlap_ctrl,
 #'   which the smaller-grain competitor activation is withheld (default: 0).
 #' @param ctrl_scaling Numeric. Scaling factor for control word overlap to
 #'   approximate baseline neighbourhood activation (default: 0.15).
+#' @param features Feature matrix used for phoneme similarity
+#'   (default \code{trace_features()}).
+#' @param similarity_matrix Optional custom similarity matrix
+#'   (from \code{\link{custom_similarity}}); takes precedence over
+#'   \code{features} for pairs it covers.
 #' @param ... Additional arguments passed to \code{\link{run_activation}}.
 #'
 #' @return A list with components:
@@ -124,20 +144,36 @@ run_item <- function(target_onset,
                      large_type = "CV", small_type = "C",
                      delta = 0L,
                      ctrl_scaling = 0.15,
+                     features = trace_features(),
+                     similarity_matrix = NULL,
                      ...) {
 
-  ovl_large_comp <- compute_overlap(target_onset, large_comp_onset, large_type)
-  ovl_large_ctrl <- compute_overlap(target_onset, large_ctrl_onset, large_type) *
+  # --- Step 1: compute word-level phonological overlaps --------------------
+  # Competitor overlaps are used at full strength; control overlaps are
+  # multiplied by ctrl_scaling to approximate the weak baseline activation
+  # of a phonologically unrelated word.
+  ovl_large_comp <- compute_overlap(target_onset, large_comp_onset, large_type,
+                                    features = features,
+                                    similarity_matrix = similarity_matrix)
+  ovl_large_ctrl <- compute_overlap(target_onset, large_ctrl_onset, large_type,
+                                    features = features,
+                                    similarity_matrix = similarity_matrix) *
     ctrl_scaling
-  ovl_small_comp <- compute_overlap(target_onset, small_comp_onset, small_type)
-  ovl_small_ctrl <- compute_overlap(target_onset, small_ctrl_onset, small_type) *
+  ovl_small_comp <- compute_overlap(target_onset, small_comp_onset, small_type,
+                                    features = features,
+                                    similarity_matrix = similarity_matrix)
+  ovl_small_ctrl <- compute_overlap(target_onset, small_ctrl_onset, small_type,
+                                    features = features,
+                                    similarity_matrix = similarity_matrix) *
     ctrl_scaling
 
-  # Larger-grain competitors: always mora-aligned (onset = 1)
+  # --- Step 2: run the activation dynamics for each competitor pair --------
+  # Larger-grain (prosodically aligned) competitors: gate always open, so
+  # their input is available from the first time step (onset = 1).
   large_out <- run_activation(ovl_large_comp, ovl_large_ctrl,
                                overlap_onset = 1L, ...)
-  # Smaller-grain competitors: delayed by delta
-
+  # Smaller-grain (sub-prosodic) competitors: input withheld for the first
+  # delta time steps (onset = 1 + delta), implementing the prosodic gate.
   small_out <- run_activation(ovl_small_comp, ovl_small_ctrl,
                                overlap_onset = 1L + delta, ...)
 

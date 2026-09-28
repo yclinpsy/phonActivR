@@ -1,6 +1,6 @@
 ---
 title: "phonActivR: Complete Tutorial"
-author: "[FILL IN: Your Name]"
+author: "Yu-Cheng Lin and Hitomi Kambara"
 date: "`r Sys.Date()`"
 output: rmarkdown::html_vignette
 vignette: >
@@ -29,8 +29,9 @@ set.seed(1234)  # Ensures reproducible synthetic data across sessions
 # Install devtools if not already present
 install.packages("devtools")
 
-# Install phonActivR from GitHub
-devtools::install_github("YOURUSERNAME/phonActivR")
+# Install phonActivR from GitHub. build_vignettes = TRUE makes this
+# tutorial available afterwards via vignette("phonActivR-tutorial")
+devtools::install_github("yclinpsy/phonActivR", build_vignettes = TRUE)
 
 # Load for the current session
 library(phonActivR)
@@ -65,6 +66,14 @@ summary(sim)
 
 ## Step 3: Visualize Predictions
 
+All plotting functions share the package's publication theme
+(`theme_phonactivr()`) and colorblind-safe Okabe–Ito palette
+(`phonactivr_colors()`), and draw **no titles or subtitles inside the
+image** — figure titles belong in your manuscript's captions, so every
+figure below is journal-ready as produced. Pass a `title` argument only
+if you want one (e.g., for slides), and use the theme on your own plots
+with `+ theme_phonactivr()`.
+
 ### Competition Effect Curves
 
 ```{r fig1, fig.width=14, fig.height=6.5}
@@ -92,7 +101,7 @@ workflow, substitute your own data.frame (same columns, no other changes).
 
 Note that `true_delta` encodes a specific competing hypothesis:
 `true_delta = 0` is the universalist prediction; `true_delta > 0` is the
-Language-Specific Grain Size hypothesis. Specifying this before data collection
+language-specific grain-size hypothesis (Cutler & Otake, 1994). Specifying this before data collection
 constitutes quantitative pre-registration of the expected temporal effect
 structure (cf. Henninger et al., 2025; BRM TOP Guidelines Level 2).
 
@@ -105,8 +114,7 @@ emp_mt <- example_empirical(sim, true_delta = 15,
 
 overlay_empirical(sim, emp_mt,
   group_colors = c("JP bilinguals" = "black",
-                   "EN monolinguals" = "grey50"),
-  title = "Mouse-Tracking: Predicted and Empirical CV-C Asymmetry")
+                   "EN monolinguals" = "grey50"))
 ```
 
 ### Eye-Tracking Example (Primary Demo Path — second paradigm)
@@ -118,9 +126,49 @@ emp_et <- example_empirical(sim, true_delta = 12,
 
 overlay_empirical(sim, emp_et,
   group_colors = c("L2 learners" = "black",
-                   "L1 controls" = "grey50"),
-  title = "Eye-Tracking: Predicted and Empirical CV-C Asymmetry")
+                   "L1 controls" = "grey50"))
 ```
+
+## Step 4b: Formal Model Selection (Goodness of Fit)
+
+Visual overlay alone leaves the choice of the best-fitting delta to the eye.
+`goodness_of_fit()` replaces this with a formal RSS/AIC model comparison,
+run separately for each group in the empirical data. (When `fit = TRUE`,
+the default, `overlay_empirical()` already runs this internally, reports
+the selected delta for each group in the console, and attaches the full
+AIC table to the returned plot as `attr(plot, "fit")` — nothing is drawn
+inside the image itself.)
+
+```{r gof}
+gof <- goodness_of_fit(sim, emp_mt)
+attr(gof, "best_delta")
+```
+
+Use the `time_window` argument to check that the selected delta is robust
+to the analysis window (e.g., excluding the first 20% of the trial):
+
+```{r gof_window}
+gof_win <- goodness_of_fit(sim, emp_mt, time_window = c(21, 101))
+attr(gof_win, "best_delta")
+```
+
+## Analysis Windows and Cross-Paradigm Comparability
+
+The onset of measurable competition depends on the paradigm (eye-tracking
+analyses conventionally begin ~200 ms after word onset; mouse-tracking
+includes motor planning and execution time; ERP components are scored in
+component-specific windows). Because phonActivR works on *normalized* time
+(percent of the analysis window the researcher chose), the best-fitting
+delta is defined relative to that window. Three practical rules follow:
+
+1. **Within a paradigm**, best-fitting delta values are directly comparable
+   across groups when trial durations and analysis windows are comparable.
+2. **Across paradigms**, do not compare raw delta values. Instead compare
+   each group's delta *against its own delta = 0 baseline* — that is,
+   whether a prosodic constraint is present and how strong it is relative
+   to the family of curves for that paradigm.
+3. **Always report** the analysis window, and check robustness with
+   `goodness_of_fit(..., time_window = ...)`.
 
 ## Step 5: Export Results
 
@@ -130,26 +178,84 @@ export_results(sim, prefix = "moraic_sim", dir = "output/")
 
 ## Using Your Own Data (The Researcher's End Goal)
 
-Replace the synthetic data with your actual GAMM smooth estimates.
-The call to `overlay_empirical()` is **identical** — only the `emp` object changes:
+Replace the synthetic data with your actual GAMM smooth estimates. The
+bundled `example_gamm` dataset has **exactly** the structure of a typical
+GAMM export (time, CV_effect, C_effect, CV_se, C_se, group), so the code
+below is fully runnable as-is; to use your own data, replace
+`data(example_gamm)` with `gamm_data <- read.csv("your_smooths.csv")` and
+keep everything else unchanged.
 
-```{r own_data, eval=FALSE}
-# From your GAMM analysis
-gamm_data <- read.csv("Combined_smooth_data.csv")
+```{r own_data, fig.width=12, fig.height=6.5}
+# Bundled GAMM-format dataset (JP group generated at delta = 15,
+# EN group at delta = 0 — see ?example_gamm)
+data(example_gamm)
+head(example_gamm)
 
-jp <- gamm_data[gamm_data$group == "JP", ]
-en <- gamm_data[gamm_data$group == "EN", ]
-
+# Convert the two component effects into the overlay format
 emp_real <- data.frame(
-  time      = rep(1:101, 2),
-  asymmetry = c(jp$CV_effect - jp$C_effect,
-                en$CV_effect - en$C_effect),
-  se        = c(sqrt(jp$CV_se^2 + jp$C_se^2),
-                sqrt(en$CV_se^2 + en$C_se^2)),
-  group     = rep(c("JP bilinguals", "EN monolinguals"), each = 101)
+  time      = example_gamm$time,
+  asymmetry = example_gamm$CV_effect - example_gamm$C_effect,
+  se        = sqrt(example_gamm$CV_se^2 + example_gamm$C_se^2),
+  group     = example_gamm$group
 )
 
-overlay_empirical(sim, emp_real)
+overlay_empirical(sim, emp_real,
+  group_colors = c("JP bilinguals" = "black",
+                   "EN monolinguals" = "grey50"))
+
+# Formal selection: JP group -> delta = 10 (nearest grid value to the
+# generating delta = 15); EN group -> delta = 0 (its generating value)
+goodness_of_fit(sim, emp_real)
+```
+
+## From Raw Data to the Overlay Format (GAMM users)
+
+`overlay_empirical()` needs only a four-column data.frame: `time`
+(normalized bins), `asymmetry` (the empirical CV--C difference), `se`
+(optional), and `group` (optional). If you analyze your time-course data
+with GAMMs, the difference smooth maps onto this directly (schematic;
+adapt object names to your pipeline):
+
+```{r gamm_stub, eval=FALSE}
+# After fitting a GAMM to your mouse-tracking / eye-tracking data
+# (e.g., with mgcv::bam), extract the CV-vs-C difference smooth per
+# group with your usual tooling (e.g., itsadug::get_difference), then:
+emp <- data.frame(
+  time      = diff_smooth$time_bin,   # 1..101 normalized bins
+  asymmetry = diff_smooth$difference, # estimated CV - C effect
+  se        = diff_smooth$se,         # its standard error
+  group     = diff_smooth$group      # e.g., "JP bilinguals"
+)
+overlay_empirical(sim, emp)
+```
+
+The bundled generation script `data-raw/make_example_gamm.R` documents
+the exact format contract with runnable code.
+
+A platform note: when saving figures with base `pdf()` on systems
+without UTF-8 locales, the delta glyph in legends can trigger font
+warnings; use `ggsave(..., device = cairo_pdf)` or PNG output.
+
+## Cross-Linguistic Stimuli: Custom Phoneme Similarities
+
+The built-in feature matrix covers 24 English consonants and 15 vowels.
+Phonemes outside this set would silently receive a flat default similarity
+(0.3) with every other phoneme — `run_simulation()` now warns when this
+would happen. For such stimuli, directly enter pairwise similarity values
+(0–1) with `custom_similarity()`; no full feature matrix is needed:
+
+```{r custom_sim}
+# Example: Korean tense stops, not in the built-in English set
+my_pairs <- data.frame(
+  p1         = c("k*", "k*", "t*"),
+  p2         = c("k",  "g",  "t"),
+  similarity = c(0.85, 0.60, 0.85)
+)
+sim_mat <- custom_similarity(my_pairs)
+phoneme_similarity("k*", "k", similarity_matrix = sim_mat)
+
+# Pass the same matrix to the full pipeline:
+# run_simulation(stim, similarity_matrix = sim_mat)
 ```
 
 ## Parameter Sensitivity
@@ -181,12 +287,12 @@ size at each delta value — use these to inform power calculations.
 power_guidance(sim, n_items = 42, n_participants = 24)
 ```
 
-**Interpretation (four-level failure framework, You & Magnuson 2018):**
+**Interpretation (four-level failure framework; Magnuson, Mirman, & Harris, 2012; You & Magnuson, 2018):**
 
 A failure to find the expected delta difference in your empirical data can
 arise at four levels:
 
-1. **Theory level** — the Language-Specific Grain Size hypothesis is wrong
+1. **Theory level** — the language-specific grain-size hypothesis is wrong
 2. **Implementation level** — phonActivR's equations misrepresent the theory
 3. **Parameter level** — the default alpha/gamma/decay do not apply to your population
 4. **Linking-hypothesis level** — your paradigm does not map cleanly onto the competition-effect quantity

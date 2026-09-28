@@ -16,13 +16,17 @@
 #'   (default: "CV Competition Effect").
 #' @param small_label Character. Legend label for smaller-grain effect
 #'   (default: "C Competition Effect").
-#' @param title Character. Plot title. Auto-generated if \code{NULL}.
+#' @param title Character. Optional overall title. If \code{NULL} (the
+#'   default) no title is drawn: for publication figures the title belongs in
+#'   the manuscript's figure caption, not inside the image (per APA / journal
+#'   figure guidelines). The per-panel delta labels are always shown because
+#'   they identify the panels.
 #'
 #' @return A ggplot2 object.
 #' @export
 plot_competition <- function(sim,
                              delta = NULL,
-                             colors = c(large = "#2166AC", small = "#D6604D"),
+                             colors = c(large = "#0072B2", small = "#D55E00"),
                              large_label = NULL,
                              small_label = NULL,
                              title = NULL) {
@@ -34,7 +38,7 @@ plot_competition <- function(sim,
   if (is.null(large_label)) large_label <- paste0(lt, " Competition Effect")
   if (is.null(small_label)) small_label <- paste0(st, " Competition Effect")
 
-  make_panel <- function(d) {
+  make_panel <- function(d, ylim = NULL) {
     res  <- sim$results[[as.character(d)]]
     time <- seq_len(sim$params$time_steps)
 
@@ -77,33 +81,38 @@ plot_competition <- function(sim,
         title = paste0("\u03b4 = ", d),
         x     = "Normalized Time (% of trial)",
         y     = "Competition Effect\n(Competitor \u2212 Control)") +
-      ggplot2::theme_bw(base_size = 11) +
-      ggplot2::theme(
-        legend.position  = "bottom",
-        legend.text      = ggplot2::element_text(size = 10),
-        panel.grid.minor = ggplot2::element_blank()
-      )
+      { if (is.null(ylim)) ggplot2::geom_blank()
+        else ggplot2::coord_cartesian(ylim = ylim) } +
+      theme_phonactivr(base_size = 11.5) +
+      ggplot2::theme(legend.position = "bottom")
   }
 
   if (is.null(delta)) {
     deltas <- sim$params$delta_values
     d0 <- deltas[1]
     d_max <- deltas[length(deltas)]
-    p1 <- make_panel(d0)
-    p2 <- make_panel(d_max)
-    combined <- p1 + p2 +
-      patchwork::plot_annotation(
-        title = title %||% "Predicted Competition Effects",
-        subtitle = paste0(
-          "phonActivR Simulation (N = ", sim$stimuli$n_items,
-          " items, 95% CI)\nLeft: \u03b4 = ", d0,
-          " | Right: \u03b4 = ", d_max
-        ),
+    # Shared y-axis limits across the two panels: the figure's job is a
+    # side-by-side comparison of two hypotheses, so both panels must be
+    # read on the same scale.
+    rng <- range(unlist(lapply(c(d0, d_max), function(d) {
+      r <- sim$results[[as.character(d)]]
+      c(r$large_effect + 1.96 * r$large_se,
+        r$small_effect - 1.96 * r$small_se, 0)
+    })), na.rm = TRUE)
+    p1 <- make_panel(d0, ylim = rng)
+    p2 <- make_panel(d_max, ylim = rng)
+    combined <- p1 + p2
+    # No overall title/subtitle is baked into the image: per-panel delta
+    # labels identify the panels, and descriptive titles belong in the
+    # manuscript caption. A user-supplied title is honored.
+    if (!is.null(title)) {
+      combined <- combined + patchwork::plot_annotation(
+        title = title,
         theme = ggplot2::theme(
-          plot.title    = ggplot2::element_text(size = 13, face = "bold"),
-          plot.subtitle = ggplot2::element_text(size = 9.5, color = "gray40")
+          plot.title = ggplot2::element_text(size = 13, face = "bold")
         )
       )
+    }
     return(combined)
   }
 
@@ -122,7 +131,9 @@ plot_competition <- function(sim,
 #' @param sim A \code{"phonActivR_sim"} object.
 #' @param delta_colors Named character vector of colors keyed by delta values.
 #'   Auto-generated if \code{NULL}.
-#' @param title Character. Plot title.
+#' @param title Character. Optional title. If \code{NULL} (the default) no
+#'   title or subtitle is drawn inside the image; figure titles belong in the
+#'   manuscript caption.
 #'
 #' @return A ggplot2 object.
 #' @export
@@ -134,10 +145,16 @@ plot_asymmetry <- function(sim,
 
   deltas <- sim$params$delta_values
   if (is.null(delta_colors)) {
-    pal <- c("#4DAF4A", "#377EB8", "#FF7F00", "#E41A1C",
-             "#984EA3", "#A65628", "#F781BF", "#999999")
-    delta_colors <- stats::setNames(pal[seq_along(deltas)],
-                                     as.character(deltas))
+    # Package-wide colorblind-safe palette (see ?phonactivr_colors): the
+    # same delta value gets the same color in every figure, and color is
+    # always paired with a distinct line type, so no plot relies on hue
+    # alone.
+    pal <- if (length(deltas) <= 8) {
+      phonactivr_colors(length(deltas))
+    } else {
+      grDevices::hcl.colors(length(deltas), "Dark 3")
+    }
+    delta_colors <- stats::setNames(pal, as.character(deltas))
   }
 
   asym_df <- dplyr::bind_rows(lapply(deltas, function(d) {
@@ -151,6 +168,14 @@ plot_asymmetry <- function(sim,
     )
   }))
 
+  # Line types distinguish the delta curves in addition to color, so the
+  # figure remains readable in black-and-white print and for readers with
+  # color-vision deficiencies.
+  lt_pool <- c("solid", "longdash", "dashed", "dotdash",
+               "dotted", "twodash", "1F", "4C88C488")
+  delta_linetypes <- stats::setNames(lt_pool[seq_along(deltas)],
+                                     as.character(deltas))
+
   lt <- sim$stimuli$large_type
   st <- sim$stimuli$small_type
 
@@ -162,7 +187,7 @@ plot_asymmetry <- function(sim,
     ggplot2::geom_ribbon(ggplot2::aes(ymin = .data$asym_lo,
                                        ymax = .data$asym_hi),
                           alpha = 0.10, color = NA) +
-    ggplot2::geom_line(linewidth = 1.3) +
+    ggplot2::geom_line(ggplot2::aes(linetype = .data$delta), linewidth = 1.3) +
     ggplot2::scale_color_manual(
       values = delta_colors,
       labels = paste0("\u03b4 = ", names(delta_colors)),
@@ -171,28 +196,24 @@ plot_asymmetry <- function(sim,
       values = delta_colors,
       labels = paste0("\u03b4 = ", names(delta_colors)),
       name   = NULL) +
+    ggplot2::scale_linetype_manual(
+      values = delta_linetypes,
+      labels = paste0("\u03b4 = ", names(delta_linetypes)),
+      name   = NULL) +
     ggplot2::scale_x_continuous(
       breaks = seq(0, 100, 20),
       labels = paste0(seq(0, 100, 20), "%")) +
     ggplot2::labs(
-      title = title %||% paste0(lt, "\u2212", st,
-                                 " Asymmetry Across \u03b4 Values"),
-      subtitle = paste0(
-        "phonActivR Simulation (N = ", sim$stimuli$n_items,
-        " items, 95% CI)\nY-axis = ", lt, " effect \u2212 ", st,
-        " effect at each time step"
-      ),
+      # No auto-generated title/subtitle: titles belong in the figure
+      # caption, not inside the image. A user-supplied title is honored.
+      title = title,
       x = "Normalized Time (% of trial)",
       y = paste0(lt, " Effect \u2212 ", st, " Effect")
     ) +
-    ggplot2::theme_bw(base_size = 12) +
+    theme_phonactivr(base_size = 12.5) +
     ggplot2::theme(
       legend.position  = "right",
-      legend.text      = ggplot2::element_text(size = 9.5),
-      legend.key.width = ggplot2::unit(1.8, "cm"),
-      panel.grid.minor = ggplot2::element_blank(),
-      plot.title       = ggplot2::element_text(size = 13, face = "bold"),
-      plot.subtitle    = ggplot2::element_text(size = 9.5, color = "gray40")
+      legend.key.width = ggplot2::unit(1.8, "cm")
     )
 }
 
@@ -207,13 +228,14 @@ plot_asymmetry <- function(sim,
 #' @param mean_trial_ms Numeric. Mean trial duration in milliseconds for
 #'   converting onset delay to ms (default: 1000).
 #' @param colors Named character vector with \code{"large"} and \code{"small"}.
-#' @param title Character. Plot title.
+#' @param title Character. Optional title. If \code{NULL} (the default) no
+#'   title is drawn inside the image; a series legend is always drawn.
 #'
 #' @return A ggplot2 object.
 #' @export
 plot_onset_timing <- function(sim,
                               mean_trial_ms = 1000,
-                              colors = c(large = "#2166AC", small = "#D6604D"),
+                              colors = c(large = "#0072B2", small = "#D55E00"),
                               title = NULL) {
 
   stopifnot(inherits(sim, "phonActivR_sim"))
@@ -228,47 +250,64 @@ plot_onset_timing <- function(sim,
     round(delay_labels$delay * mean_trial_ms / 100), " ms)"
   )
 
-  ggplot2::ggplot(onset_df, ggplot2::aes(x = .data$delta)) +
+  # Series labels drive a proper in-panel legend (the legend used to live in
+  # the subtitle text; a mapped legend is clearer and survives caption-only
+  # titling). Colors are keyed by series so both print and colorblind-safe
+  # shape/linetype cues distinguish them.
+  lab_small <- paste0(st, " onset")
+  lab_large <- paste0(lt, " onset (reference)")
+  series_colors    <- stats::setNames(unname(colors[c("small", "large")]),
+                                      c(lab_small, lab_large))
+  series_linetypes <- stats::setNames(c("solid", "dashed"),
+                                      c(lab_small, lab_large))
+  series_shapes    <- stats::setNames(c(16, 15), c(lab_small, lab_large))
+
+  long_df <- rbind(
+    data.frame(delta = onset_df$delta, onset = onset_df$small_onset,
+               series = lab_small),
+    data.frame(delta = onset_df$delta, onset = onset_df$large_onset,
+               series = lab_large)
+  )
+  long_df$series <- factor(long_df$series, levels = c(lab_small, lab_large))
+
+  ggplot2::ggplot(long_df,
+                  ggplot2::aes(x = .data$delta, y = .data$onset,
+                               color = .data$series)) +
     ggplot2::geom_ribbon(
       data = onset_df[!is.na(onset_df$small_onset) & !is.na(onset_df$large_onset), ],
-      ggplot2::aes(ymin = .data$large_onset, ymax = .data$small_onset),
-      fill = "gray80", alpha = 0.6) +
-    ggplot2::geom_line(ggplot2::aes(y = .data$large_onset),
-                        color = colors["large"], linewidth = 1.4,
-                        linetype = "dashed") +
-    ggplot2::geom_point(ggplot2::aes(y = .data$large_onset),
-                         color = colors["large"], size = 5, shape = 15) +
-    ggplot2::geom_line(ggplot2::aes(y = .data$small_onset),
-                        color = colors["small"], linewidth = 1.8) +
-    ggplot2::geom_point(ggplot2::aes(y = .data$small_onset),
-                         color = colors["small"], size = 6) +
+      ggplot2::aes(x = .data$delta, ymin = .data$large_onset,
+                   ymax = .data$small_onset),
+      fill = "gray80", alpha = 0.6, inherit.aes = FALSE) +
+    ggplot2::geom_line(ggplot2::aes(linetype = .data$series),
+                       linewidth = 1.5) +
+    ggplot2::geom_point(ggplot2::aes(shape = .data$series), size = 5) +
     ggplot2::geom_text(data = delay_labels,
                         ggplot2::aes(x = .data$delta + 1, y = .data$small_onset + 2.5,
                                       label = .data$label),
                         color = colors["small"], size = 3.8,
-                        fontface = "bold", hjust = 0) +
+                        fontface = "bold", hjust = 0, inherit.aes = FALSE) +
+    ggplot2::scale_color_manual(values = series_colors, name = NULL) +
+    ggplot2::scale_linetype_manual(values = series_linetypes, name = NULL) +
+    ggplot2::scale_shape_manual(values = series_shapes, name = NULL) +
     ggplot2::scale_x_continuous(
       breaks = sim$params$delta_values,
-      labels = paste0("\u03b4 = ", sim$params$delta_values)) +
+      labels = paste0("\u03b4 = ", sim$params$delta_values),
+      # Generous right-hand expansion keeps the "+X% (~Y ms)" annotations
+      # (drawn to the right of the last point) inside the panel.
+      expand = ggplot2::expansion(mult = c(0.07, 0.24))) +
     ggplot2::scale_y_continuous(
       breaks = seq(0, 100, 5),
       labels = function(x) paste0(x, "%")) +
     ggplot2::labs(
-      title = title %||% paste0(st, " Competition Onset as Function of \u03b4"),
-      subtitle = paste0(
-        "phonActivR Simulation (N = ", sim$stimuli$n_items, " items)\n",
-        "Red = ", st, " onset | Blue = ", lt, " onset (reference) | ",
-        "ms estimates assume ", mean_trial_ms, " ms trial"
-      ),
+      # No auto title/subtitle inside the image; a supplied title is honored.
+      title = title,
       x = "Prosodic Constraint Parameter (\u03b4)",
       y = "Competition Onset (% of trial)"
     ) +
-    ggplot2::theme_bw(base_size = 12) +
+    theme_phonactivr(base_size = 12.5) +
     ggplot2::theme(
-      plot.title       = ggplot2::element_text(size = 13, face = "bold"),
-      plot.subtitle    = ggplot2::element_text(size = 9.5, color = "gray40"),
-      panel.grid.minor = ggplot2::element_blank(),
-      axis.text.x      = ggplot2::element_text(size = 11, face = "bold")
+      legend.position = "bottom",
+      axis.text.x     = ggplot2::element_text(size = 11, face = "bold")
     )
 }
 
@@ -292,15 +331,26 @@ plot_onset_timing <- function(sim,
 #'   the first group and grey for the second.
 #' @param delta_colors Named character vector for predicted curves. Passed to
 #'   \code{\link{plot_asymmetry}}.
-#' @param title Character. Plot title.
+#' @param title Character. Optional title. If \code{NULL} (the default) no
+#'   title is drawn inside the image; figure titles belong in the caption.
+#' @param fit Logical. If \code{TRUE} (the default), the best-fitting delta
+#'   for each empirical group is estimated formally via
+#'   \code{\link{goodness_of_fit}} (RSS/AIC model comparison); the result is
+#'   printed to the console and the full AIC table is attached to the
+#'   returned plot as the \code{"fit"} attribute (no text is drawn inside
+#'   the image). This replaces visual curve-matching with a quantitative
+#'   selection rule. Set \code{FALSE} to skip.
 #'
-#' @return A ggplot2 object.
+#' @return A ggplot2 object. When \code{fit = TRUE}, the object carries a
+#'   \code{"fit"} attribute (the \code{\link{goodness_of_fit}} table, whose
+#'   own \code{"best_delta"} attribute gives the selected delta per group).
 #' @export
 overlay_empirical <- function(sim,
                               empirical_data,
                               group_colors = NULL,
                               delta_colors = NULL,
-                              title = NULL) {
+                              title = NULL,
+                              fit = TRUE) {
 
   stopifnot(inherits(sim, "phonActivR_sim"))
   stopifnot(is.data.frame(empirical_data))
@@ -318,7 +368,7 @@ overlay_empirical <- function(sim,
   groups <- unique(empirical_data$group)
   if (is.null(group_colors)) {
     group_colors <- stats::setNames(
-      c("black", "grey50", "#E7298A", "#66A61E")[seq_along(groups)],
+      c("black", "grey45", "#CC79A7", "#56B4E9")[seq_along(groups)],
       groups
     )
   }
@@ -359,6 +409,10 @@ overlay_empirical <- function(sim,
       )
     }
 
+    # Place the group label near the curve peak, but keep it inside the
+    # panel (a peak at the right edge would otherwise clip the label).
+    x_lab <- min(gd$time[which.max(gd$asymmetry)] + 3,
+                 max(gd$time, na.rm = TRUE) - 12)
     p <- p + ggplot2::geom_line(
       data = gd,
       ggplot2::aes(x = .data$time, y = .data$asymmetry),
@@ -366,19 +420,31 @@ overlay_empirical <- function(sim,
       linetype = lt, inherit.aes = FALSE
     ) +
       ggplot2::annotate("text",
-        x = gd$time[which.max(gd$asymmetry)] + 3,
+        x = x_lab,
         y = max(gd$asymmetry, na.rm = TRUE) + 0.02,
         label = g,
         color = group_colors[g], size = 3.2, hjust = 0, fontface = "bold"
       )
   }
 
-  p + ggplot2::labs(
-    caption = paste0(
-      "Empirical lines normalized to simulation scale (shape preserved, ",
-      "amplitude rescaled).\n",
-      "The \u03b4 curve the empirical line most closely tracks = ",
-      "estimated prosodic constraint strength."
+  # --- Optional formal fit: replace eyeballing with AIC model selection ----
+  # The selection result is reported to the console and attached to the
+  # returned plot; nothing is drawn inside the image, so the figure stays
+  # publication-clean (titles and interpretive notes belong in the caption).
+  fit_table <- NULL
+  if (isTRUE(fit)) {
+    # Run the RSS/AIC comparison quietly for each group
+    quiet_out <- utils::capture.output(
+      fit_table <- suppressMessages(goodness_of_fit(sim, empirical_data))
     )
-  )
+    best <- attr(fit_table, "best_delta")
+    best_txt <- paste0(names(best), ": best-fitting \u03b4 = ", best,
+                       collapse = " | ")
+    cli::cli_alert_info(
+      paste0("AIC model selection \u2014 ", best_txt,
+             " (full table: attr(plot, 'fit'))"))
+  }
+
+  attr(p, "fit") <- fit_table
+  p
 }

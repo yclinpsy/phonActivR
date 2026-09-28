@@ -32,12 +32,18 @@
 #'   process for the experimental group (default: 15). This simulates what the
 #'   empirical data would look like if the actual prosodic constraint strength
 #'   were delta = 15.
-#' @param noise_sd Numeric. Standard deviation of Gaussian noise added to the
-#'   curves to simulate empirical variability (default: 0.015).
+#' @param noise_sd Numeric or \code{NULL}. Standard deviation of Gaussian noise
+#'   added to the curves to simulate empirical variability. When \code{NULL}
+#'   (the default), a paradigm-typical value is used: 0.015 for
+#'   \code{"mouse-tracking"}, 0.020 for \code{"eye-tracking"}, and 0.030 for
+#'   \code{"erp"} (reflecting the typically lower signal-to-noise ratio of ERP
+#'   difference waves). Supply a number to override.
 #' @param group_labels Character vector of length 2. Labels for the experimental
 #'   and control groups (default: \code{c("L2 bilinguals", "L1 monolinguals")}).
-#' @param paradigm Character. Label for the experimental paradigm, used in
-#'   documentation only (default: "mouse-tracking").
+#' @param paradigm Character. One of \code{"mouse-tracking"},
+#'   \code{"eye-tracking"}, or \code{"erp"}. Determines the default
+#'   \code{noise_sd} (see above) and is recorded in the returned data frame's
+#'   \code{paradigm} column, so that synthetic datasets are self-documenting.
 #' @param seed Integer. Random seed for reproducibility (default: 42).
 #'
 #' @return A data.frame with columns:
@@ -46,6 +52,7 @@
 #'     \item{asymmetry}{Numeric. Larger-grain minus smaller-grain effect}
 #'     \item{se}{Numeric. Standard error estimate}
 #'     \item{group}{Character. Group label}
+#'     \item{paradigm}{Character. The paradigm label supplied}
 #'   }
 #'
 #'   This data.frame is ready to pass directly to \code{\link{overlay_empirical}}.
@@ -69,13 +76,25 @@
 #' overlay_empirical(sim, emp_mt)
 example_empirical <- function(sim,
                               true_delta = 15,
-                              noise_sd = 0.015,
+                              noise_sd = NULL,
                               group_labels = c("L2 bilinguals", "L1 monolinguals"),
-                              paradigm = "mouse-tracking",
+                              paradigm = c("mouse-tracking", "eye-tracking", "erp"),
                               seed = 42L) {
 
   stopifnot(inherits(sim, "phonActivR_sim"))
   stopifnot(length(group_labels) == 2)
+
+  # Validate the paradigm label and, when noise_sd was not supplied, pick a
+  # paradigm-typical noise level (mouse-tracking curves from GAMM smooths are
+  # relatively smooth; ERP difference waves are noisier).
+  paradigm <- match.arg(paradigm)
+  if (is.null(noise_sd)) {
+    noise_sd <- switch(paradigm,
+      "mouse-tracking" = 0.015,
+      "eye-tracking"   = 0.020,
+      "erp"            = 0.030
+    )
+  }
 
   set.seed(seed)
   ts <- sim$params$time_steps
@@ -124,6 +143,7 @@ example_empirical <- function(sim,
     asymmetry = c(exp_noisy, ctrl_noisy),
     se        = c(se_exp, se_ctrl),
     group     = rep(group_labels, each = ts),
+    paradigm  = paradigm,
     stringsAsFactors = FALSE
   )
 }
@@ -186,7 +206,7 @@ export_results <- function(sim, prefix = "phonActivR", dir = ".") {
   utils::write.csv(params_df, params_path, row.names = FALSE)
 
   files <- c(summary_path, curves_path, params_path)
-  cli::cli_alert_success("Exported {length(files)} files to {dir}/")
+  cli::cli_alert_success("Exported {length(files)} files to {normalizePath(dir)}")
   invisible(files)
 }
 
@@ -200,9 +220,11 @@ export_results <- function(sim, prefix = "phonActivR", dir = ".") {
 #' data.
 #'
 #' @section Four-Level Failure Framework:
-#' Following You & Magnuson (2018), failures to detect a delta difference can
-#' arise at four levels: (1) \emph{theory level} -- the Language-Specific Grain
-#' Size hypothesis is wrong; (2) \emph{implementation level} -- phonActivR's
+#' Following Magnuson, Mirman, and Harris (2012; as applied to modeling tools
+#' by You & Magnuson, 2018), failures to detect a delta difference can
+#' arise at four levels: (1) \emph{theory level} -- the language-specific
+#' grain-size hypothesis (after Cutler & Otake's, 1994, language-specific
+#' listening proposal) is wrong; (2) \emph{implementation level} -- phonActivR's
 #' interactive activation equations misrepresent the target theory;
 #' (3) \emph{parameter level} -- the default alpha/gamma/decay values do not
 #' apply to the population studied; or (4) \emph{linking-hypothesis level} --
@@ -216,6 +238,17 @@ export_results <- function(sim, prefix = "phonActivR", dir = ".") {
 #' @param effect_reliability Numeric in (0,1). Estimated test-retest reliability
 #'   of the empirical asymmetry measure (default: 0.70, a conservative estimate
 #'   for GAMM-based mouse-tracking data). Higher reliability increases power.
+#' @param empirical_sd Numeric > 0. Assumed between-participant standard
+#'   deviation of the empirical peak asymmetry, on the same normalized
+#'   activation scale as the simulation output (default: 0.04, a conservative
+#'   value chosen so that the ~0.02 peak-asymmetry difference that published
+#'   GAMM mouse-tracking studies typically resolve corresponds to a medium
+#'   standardized effect). The model's own item-level standard errors are NOT
+#'   used here: the simulation is nearly deterministic, so its internal SEs
+#'   approach zero and would produce meaninglessly large standardized effect
+#'   sizes. The empirical noise that limits detection comes from participants,
+#'   not from the model; researchers with pilot data should replace the
+#'   default with the observed SD of their group-level peak asymmetry.
 #'
 #' @return A data.frame with one row per pair of adjacent delta values,
 #'   showing the peak asymmetry difference, approximate standardised effect
@@ -224,9 +257,15 @@ export_results <- function(sim, prefix = "phonActivR", dir = ".") {
 #'   supplied design parameters.
 #'
 #' @references
+#' Magnuson, J. S., Mirman, D., & Harris, H. D. (2012). Computational models
+#' of spoken word recognition. In M. Spivey, K. McRae, & M. Joanisse (Eds.),
+#' \emph{The Cambridge handbook of psycholinguistics} (pp. 76--103).
+#' Cambridge University Press.
+#'
 #' You, H., & Magnuson, J. S. (2018). TISK 1.0: An easy-to-use Python
 #' implementation of the time-invariant string kernel model of spoken word
-#' recognition. \emph{Behavior Research Methods}, 50(2), 871--889.
+#' recognition. \emph{Behavior Research Methods}, 50(3), 871--889.
+#' https://doi.org/10.3758/s13428-017-1012-5
 #'
 #' Henninger, F., Malejka, S., & Titz, J. (2025). Contrast analysis for
 #' competing hypotheses: cofad. \emph{Behavior Research Methods}, 57, 326.
@@ -239,9 +278,11 @@ export_results <- function(sim, prefix = "phonActivR", dir = ".") {
 power_guidance <- function(sim,
                            n_items          = 42L,
                            n_participants   = 24L,
-                           effect_reliability = 0.70) {
+                           effect_reliability = 0.70,
+                           empirical_sd     = 0.04) {
 
   stopifnot(inherits(sim, "phonActivR_sim"))
+  stopifnot(is.numeric(empirical_sd), empirical_sd > 0)
 
   delta_vals <- sim$params$delta_values
   if (length(delta_vals) < 2) {
@@ -256,15 +297,14 @@ power_guidance <- function(sim,
     r2  <- sim$results[[as.character(d2)]]
 
     peak_diff <- max(r2$asymmetry) - max(r1$asymmetry)
-    # Approximate SD from SE at peak time of larger delta
-    peak_t   <- which.max(r2$asymmetry)
-    se_at_peak <- mean(c(r1$asym_se[peak_t], r2$asym_se[peak_t]))
-    approx_sd   <- se_at_peak * sqrt(n_items)
 
-    # Cohen's d analogue, corrected for reliability
-    d_approx <- if (approx_sd > 0) {
-      (peak_diff / approx_sd) * sqrt(effect_reliability)
-    } else NA_real_
+    # Cohen's d analogue against the ASSUMED EMPIRICAL noise (see the
+    # empirical_sd argument), attenuated for measurement reliability.
+    # The simulation's own item-level SEs are deliberately not used: the
+    # model is nearly deterministic, so those SEs approach zero and would
+    # inflate d to meaningless values; detection in a real study is limited
+    # by between-participant variability in the empirical measure.
+    d_approx <- (abs(peak_diff) / empirical_sd) * sqrt(effect_reliability)
 
     # Qualitative power rating (heuristic for GAMM time-course)
     power_rating <- dplyr::case_when(
@@ -290,12 +330,14 @@ power_guidance <- function(sim,
   result <- dplyr::bind_rows(rows)
   cat("\n=== phonActivR Power Guidance ===\n")
   cat("Design: ", n_items, " items x ", n_participants, " participants/group\n", sep = "")
-  cat("Reliability assumption: ", effect_reliability, "\n\n", sep = "")
-  cat("Interpretation note (four-level failure framework, You & Magnuson 2018):\n")
+  cat("Reliability assumption: ", effect_reliability,
+      " | Assumed empirical SD: ", empirical_sd, "\n\n", sep = "")
+  cat("Interpretation note (four-level failure framework, Magnuson et al.,\n")
+  cat("2012; applied to modeling tools by You & Magnuson, 2018):\n")
   cat("  'likely insufficient' power may indicate a parameter-level mismatch\n")
   cat("  (level 3) rather than a theory-level failure (level 1). Run\n")
   cat("  sensitivity analysis (Application 4 in the tutorial) before\n")
-  cat("  concluding that the Language-Specific Grain Size hypothesis is wrong.\n\n")
+  cat("  concluding that the language-specific grain-size hypothesis is wrong.\n\n")
   print(result, row.names = FALSE)
   invisible(result)
 }

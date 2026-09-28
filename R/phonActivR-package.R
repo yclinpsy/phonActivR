@@ -1,8 +1,8 @@
 #' phonActivR: Phonological Activation Simulator for Spoken Word Recognition
 #'
-#' A lightweight, pure-R interactive activation simulator for modeling
-#' phonological competition during spoken word recognition. Implements a
-#' TRACE-style architecture with built-in phonological overlap computation,
+#' A pure-R package for simulating and testing prosodic-constraint (delta)
+#' hypotheses about phonological competition in spoken word recognition. Implements a
+#' compact lateral-inhibition competition model in the interactive-activation family (not TRACE) with built-in phonological overlap computation,
 #' customizable prosodic constraint parameters, and tools for overlaying
 #' predictions onto empirical time-course data.
 #'
@@ -32,15 +32,23 @@
 #'
 #' @section Key Functions:
 #' \describe{
-#'   \item{\code{\link{trace_features}}}{TRACE 7-feature phoneme matrix}
+#'   \item{\code{\link{trace_features}}}{Binary adaptation of the McClelland & Elman (1986) feature dimensions (similarity metric only; see its help page for provenance)}
 #'   \item{\code{\link{phoneme_similarity}}}{Feature-based phoneme similarity}
 #'   \item{\code{\link{compute_overlap}}}{Phonological overlap computation}
 #'   \item{\code{\link{run_activation}}}{Single-pair activation dynamics}
 #'   \item{\code{\link{run_item}}}{Single-item two-condition simulation}
 #'   \item{\code{\link{run_simulation}}}{Full multi-item, multi-delta simulation}
 #'   \item{\code{\link{find_onset}}}{Competition onset detection}
+#'   \item{\code{\link{theme_phonactivr}}}{Publication ggplot2 theme shared by all figures}
+#'   \item{\code{\link{phonactivr_colors}}}{Colorblind-safe Okabe-Ito categorical palette}
 #' }
 #'
 #' @docType package
 #' @name phonActivR-package
+#' @importFrom rlang .data %||%
+#' @importFrom stats sd setNames filter rnorm
+#' @importFrom utils read.csv write.csv capture.output
+#' @importFrom dplyr bind_rows case_when
+#' @importFrom cli cli_alert_success cli_alert_warning cli_alert_info cli_h1
+#' @importFrom patchwork plot_annotation plot_layout
 "_PACKAGE"

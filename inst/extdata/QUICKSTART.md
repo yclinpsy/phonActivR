@@ -5,7 +5,7 @@
 ```r
 # Install from GitHub (requires devtools)
 install.packages("devtools")  # if not already installed
-devtools::install_github("author/phonActivR")
+devtools::install_github("yclinpsy/phonActivR", build_vignettes = TRUE)
 library(phonActivR)
 ```
 
@@ -19,7 +19,8 @@ stim <- example_stimuli_jp()
 sim  <- run_simulation(stim, delta_values = c(0, 10, 20, 30))
 summary(sim)
 
-# Generate all three publication figures
+# Generate the three core figures (all 16 tutorial figures:
+# source generate_figures.R)
 fig1 <- plot_competition(sim)
 fig2 <- plot_asymmetry(sim)
 fig3 <- plot_onset_timing(sim, mean_trial_ms = 1500)
