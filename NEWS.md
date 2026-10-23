@@ -189,6 +189,16 @@ the first time.
 * `inst/extdata/linking_tests/linking_tests.R` reimplements the step-1
   update so that its reference runs match `run_simulation()` exactly.
 
+## Graphics devices
+
+* Labels of the form "delta = 0" (legends, panel titles, the onset-timing
+  axis) are now drawn with plotmath, and the minus and approximately-equal
+  signs in plot labels use ASCII or plotmath. All package plots therefore
+  render on the base `pdf()` device, which cannot encode a Unicode delta and,
+  in recent versions of R, stops with a conversion error instead of
+  substituting a dot. This also fixes the examples of `compare_languages()`
+  and `example_empirical()` under R CMD check on R 4.6.
+
 ## Other
 
 * New `example_stimuli()`, identical to `example_stimuli_jp()` (kept for

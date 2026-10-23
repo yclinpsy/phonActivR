@@ -2,6 +2,16 @@
 # phonActivR: Visualization Functions
 # =============================================================================
 
+# Legend and axis labels of the form "delta = 0" are built with plotmath, so
+# that the Greek letter is drawn from the symbol font on every graphics device.
+# The base pdf() device cannot encode a Unicode delta in a text string, and
+# recent versions of R stop with an error instead of substituting a dot.
+.delta_labels <- function(x, bold = FALSE) {
+  lab <- paste0("delta == ", x)
+  if (bold) lab <- paste0("bold(", lab, ")")
+  parse(text = lab)
+}
+
 #' Plot Competition Effects (Two Panels: Smallest and Largest Delta)
 #'
 #' Plots predicted larger-grain and smaller-grain competition effect curves
@@ -78,9 +88,9 @@ plot_competition <- function(sim,
         breaks = seq(0, 100, 20),
         labels = paste0(seq(0, 100, 20), "%")) +
       ggplot2::labs(
-        title = paste0("\u03b4 = ", d),
+        title = bquote(bold(delta == .(d))),
         x     = "Normalized Time (% of trial)",
-        y     = "Competition Effect\n(Competitor \u2212 Control)") +
+        y     = "Competition Effect\n(Competitor - Control)") +
       { if (is.null(ylim)) ggplot2::geom_blank()
         else ggplot2::coord_cartesian(ylim = ylim) } +
       theme_phonactivr(base_size = 11.5) +
@@ -190,15 +200,15 @@ plot_asymmetry <- function(sim,
     ggplot2::geom_line(ggplot2::aes(linetype = .data$delta), linewidth = 1.3) +
     ggplot2::scale_color_manual(
       values = delta_colors,
-      labels = paste0("\u03b4 = ", names(delta_colors)),
+      labels = .delta_labels(names(delta_colors)),
       name   = NULL) +
     ggplot2::scale_fill_manual(
       values = delta_colors,
-      labels = paste0("\u03b4 = ", names(delta_colors)),
+      labels = .delta_labels(names(delta_colors)),
       name   = NULL) +
     ggplot2::scale_linetype_manual(
       values = delta_linetypes,
-      labels = paste0("\u03b4 = ", names(delta_linetypes)),
+      labels = .delta_labels(names(delta_linetypes)),
       name   = NULL) +
     ggplot2::scale_x_continuous(
       breaks = seq(0, 100, 20),
@@ -208,7 +218,7 @@ plot_asymmetry <- function(sim,
       # caption, not inside the image. A user-supplied title is honored.
       title = title,
       x = "Normalized Time (% of trial)",
-      y = paste0(lt, " Effect \u2212 ", st, " Effect")
+      y = bquote(.(paste(lt, "Effect")) - .(paste(st, "Effect")))
     ) +
     theme_phonactivr(base_size = 12.5) +
     ggplot2::theme(
@@ -250,7 +260,7 @@ plot_onset_timing <- function(sim,
 
   delay_labels <- onset_df[!is.na(onset_df$delay), ]
   delay_labels$label <- paste0(
-    "+", delay_labels$delay, "% (\u2248",
+    "+", delay_labels$delay, "% (~",
     round(delay_labels$delay * mean_trial_ms / 100), " ms)"
   )
 
@@ -295,7 +305,7 @@ plot_onset_timing <- function(sim,
     ggplot2::scale_shape_manual(values = series_shapes, name = NULL) +
     ggplot2::scale_x_continuous(
       breaks = sim$params$delta_values,
-      labels = paste0("\u03b4 = ", sim$params$delta_values),
+      labels = .delta_labels(sim$params$delta_values, bold = TRUE),
       # Generous right-hand expansion keeps the "+X% (~Y ms)" annotations
       # (drawn to the right of the last point) inside the panel.
       expand = ggplot2::expansion(mult = c(0.07, 0.24))) +
@@ -305,7 +315,7 @@ plot_onset_timing <- function(sim,
     ggplot2::labs(
       # No auto title/subtitle inside the image; a supplied title is honored.
       title = title,
-      x = "Prosodic Constraint Parameter (\u03b4)",
+      x = expression("Prosodic Constraint Parameter (" * delta * ")"),
       y = "Competition Onset (% of trial)"
     ) +
     theme_phonactivr(base_size = 12.5) +
