@@ -1,8 +1,11 @@
 # =============================================================================
 # ARCHIVAL NOTE (added with package v0.2.0)
 # -----------------------------------------------------------------------------
-# This script is preserved EXACTLY as originally run for the empirical study,
-# for independent verification of computational equivalence. Its comments and
+# This script is preserved EXACTLY as originally written for a Japanese-English
+# bilingual study, as a record of where the package's dynamics came from. It
+# predates phonActivR 0.3.0: competitor input in this script never ends (no
+# disambiguation point), so its output is not expected to match the current
+# package defaults (seg_steps = 10). Its comments and
 # terminology PREDATE the v0.2.0 reframing: where this file says "TRACE-style
 # interactive activation", "TRACE 7-feature phoneme matrix", or
 # "Language-Specific Grain Size Hypothesis", the current package documentation

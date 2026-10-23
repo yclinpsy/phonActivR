@@ -11,7 +11,13 @@ export_results(sim, prefix = "phonActivR", dir = ".")
 
 \item{prefix}{Character. File name prefix (default: "phonActivR").}
 
-\item{dir}{Character. Output directory (default: current working directory).}
+\item{dir}{Character. Output directory (default: current working directory).
+
+Files written: \code{_summary.csv}, \code{_curves.csv} (every delta),
+\code{_parameters.csv} (all settings needed to re-run the simulation,
+including \code{seg_steps}, \code{residual_input}, \code{gate}, and the
+package version), \code{_similarity.csv} (only when a custom similarity
+matrix was used), and \code{_sessionInfo.txt}.}
 }
 \value{
 Invisible character vector of file paths written.

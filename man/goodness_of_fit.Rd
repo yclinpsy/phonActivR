@@ -4,7 +4,13 @@
 \alias{goodness_of_fit}
 \title{Empirical Goodness-of-Fit: RSS and AIC Model Comparison}
 \usage{
-goodness_of_fit(sim, empirical_data, time_window = NULL)
+goodness_of_fit(
+  sim,
+  empirical_data,
+  time_window = NULL,
+  lag = 0:50,
+  verbose = TRUE
+)
 }
 \arguments{
 \item{sim}{A \code{"phonActivR_sim"} object.}
@@ -16,34 +22,75 @@ comparison is run separately for each group.}
 \item{time_window}{Optional numeric vector of length 2,
 \code{c(first, last)}, giving the range of normalized time steps over
 which to compute the fit (default: the full curve).}
+
+\item{lag}{Integer vector of candidate response latencies, in time steps
+(default \code{0:50}; use \code{0} for no latency). The model's time axis starts at word onset,
+whereas an empirical normalized time axis usually also contains
+pre-response and motor latency. When \code{lag} has more than one value,
+each delta model is shifted right by every candidate lag (padding with
+zero activation) and the lag with the lowest RSS is kept for that
+model, adding one free parameter (\code{n_params = 2}). Every model gets
+the same flexibility, so the comparison between delta values stays fair.
+The default range suits time-normalized mouse-tracking; widen it if a
+fitted latency lies on its edge (a warning is given).}
+
+\item{verbose}{Logical. Print the model-comparison table (default TRUE).}
 }
 \value{
-A data.frame with columns: (\code{group},) \code{delta},
-  \code{rss}, \code{n_params}, \code{aic}, \code{delta_aic} (difference
-  from the best model within that group). The best-fitting delta per group
-  is attached as the \code{"best_delta"} attribute (a named numeric vector).
+A data.frame with columns: \code{group}, \code{delta},
+  \code{lag} (the selected latency), \code{scale} (the least-squares
+  factor applied to the model curve), \code{r2} (proportion of the
+  empirical curve's variance explained by the scaled, shifted model
+  curve; an absolute measure of fit that the delta_AIC ranking lacks),
+  \code{rss}, \code{n_params}, \code{aic}, \code{delta_aic}
+  (difference from the best model within that group). The best-fitting
+  delta per group is attached as the \code{"best_delta"} attribute (a
+  named numeric vector).
 }
 \description{
-Compares the fit of a universalist model (delta = 0) against each non-zero
-delta model using residual sum of squares (RSS) and the Akaike Information
-Criterion (AIC). This provides a formal statistical framework for selecting
-the best-fitting prosodic constraint hypothesis, replacing visual
-"eyeballing" of the overlay figure with a quantitative model-selection
-procedure. It is Step 6b of the recommended workflow: run it on the same
-empirical data passed to \code{\link{overlay_empirical}} (or simply set
-\code{fit = TRUE} in \code{overlay_empirical()}, which calls this function
-internally).
+Compares how well each simulated delta curve accounts for an empirical
+asymmetry curve, using the residual sum of squares (RSS) and the Akaike
+Information Criterion (AIC). This replaces visual "eyeballing" of the
+overlay figure with an explicit selection rule. It is Step 6a of the
+recommended workflow; \code{\link{overlay_empirical}} calls it internally,
+so the overlay figure and the formal selection always use the same
+scaling.
 }
+\section{Scaling}{
+
+Simulated activations and empirical effects are on different scales, so
+each delta model's curve \eqn{m} is multiplied by the non-negative
+least-squares factor \eqn{b = \sum e_t m_t / \sum m_t^2} that brings it
+closest to the empirical curve \eqn{e}; RSS \eqn{= \sum (e_t - b m_t)^2}
+is then in the data's own units, and \code{r2} is \eqn{1 - RSS / \sum
+(e_t - \bar{e})^2}. Every model gets its best possible scaling, and none is
+favored by an arbitrary peak-matching choice. Because every model has the
+same number of free parameters, AIC orders the models exactly as RSS does.
+}
+
+\section{Interpreting delta_AIC}{
+
+The AIC is computed as if the residuals at successive time bins were
+independent. Time-course residuals are strongly autocorrelated, so the
+effective number of observations is much smaller than the number of bins
+and large delta_AIC values overstate the strength of evidence. Treat the
+delta_AIC column as a ranking of the candidate models, not as a
+likelihood ratio, and check that the selected delta is stable across
+reasonable analysis windows (\code{time_window}) and, where participant-
+level data exist, across bootstrap resamples of participants.
+}
+
 \section{Analysis window}{
 
 The delta estimate can depend on the analysis window the researcher chose
 when extracting the empirical curve (e.g., eye-tracking analyses often
 start 200 ms after word onset, whereas mouse-tracking includes motor
-planning time). Use \code{time_window} to restrict the fit to a sub-window
-and check that the selected delta is robust to reasonable window choices.
-Because window conventions differ across paradigms, best-fitting delta
-values are most safely compared \emph{within} a paradigm; see the tutorial
-section "Analysis Windows and Cross-Paradigm Comparability".
+planning time). Use \code{time_window} to restrict the fit to a sub-window.
+Because the delta models differ mainly early in the trial (the curves
+converge in the second half), windows that exclude the early portion carry
+little information about delta. Best-fitting delta values are most safely
+compared \emph{within} a paradigm; see the tutorial section "Analysis
+Windows and Cross-Paradigm Comparability".
 }
 
 \examples{

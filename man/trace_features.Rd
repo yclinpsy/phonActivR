@@ -31,6 +31,21 @@ For phonemes or contrasts it cannot express, supply direct pairwise
 values via \code{\link{custom_similarity}}.
 }
 
+\section{Resolution (identical vectors)}{
+
+Seven binary dimensions cannot separate 39 phonemes: the matrix has 22
+distinct vectors. The following phonemes share a vector and therefore
+have similarity 1 with each other: p = ch; b = jh; f = th; v = dh;
+ah = ao = aw = ow = oy = uh = uw = aa; y = eh = er = ey;
+ae = ay = ih = iy. Stimulus sets whose contrasts rely on these
+distinctions (e.g., a control that differs from the target only in
+/b/ versus /dZ/) need \code{\link{custom_similarity}} values for those
+pairs. In the bundled 42-item set, two controls are affected (the CV
+control of \emph{budget}, \emph{jump}, and the C control of
+\emph{jacket}, \emph{boy}); their overlap equals that of the
+corresponding competitor.
+}
+
 \examples{
 features <- trace_features()
 features[["b"]]

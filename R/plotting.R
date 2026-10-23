@@ -2,7 +2,7 @@
 # phonActivR: Visualization Functions
 # =============================================================================
 
-#' Plot Competition Effects (Figure 1 style)
+#' Plot Competition Effects (Two Panels: Smallest and Largest Delta)
 #'
 #' Plots predicted larger-grain and smaller-grain competition effect curves
 #' for a specified delta value, with 95\% CI bands across items.
@@ -122,7 +122,7 @@ plot_competition <- function(sim,
 }
 
 
-#' Plot Asymmetry Gradient Across Delta Values (Figure 2 style)
+#' Plot Asymmetry Gradient Across Delta Values
 #'
 #' Plots the larger-grain minus smaller-grain competition effect asymmetry
 #' curves for all tested delta values. This is the primary figure for
@@ -218,7 +218,7 @@ plot_asymmetry <- function(sim,
 }
 
 
-#' Plot Onset Timing as Function of Delta (Figure 3 style)
+#' Plot Onset Timing as a Function of Delta
 #'
 #' Plots the predicted competition onset for both grain sizes across all
 #' delta values, showing how the prosodic delay shifts the smaller-grain
@@ -241,6 +241,10 @@ plot_onset_timing <- function(sim,
   stopifnot(inherits(sim, "phonActivR_sim"))
 
   onset_df <- sim$onsets
+  # Onsets are stored as time steps; step k corresponds to (k - 1)% of the
+  # trial, so convert to percent for plotting (delays are unaffected).
+  onset_df$small_onset <- onset_df$small_onset - 1
+  onset_df$large_onset <- onset_df$large_onset - 1
   lt <- sim$stimuli$large_type
   st <- sim$stimuli$small_type
 
@@ -318,6 +322,13 @@ plot_onset_timing <- function(sim,
 #' to an asymmetry gradient plot, enabling visual comparison between
 #' model predictions and observed behavior.
 #'
+#' Each group is drawn exactly as \code{\link{goodness_of_fit}} fitted it:
+#' in model units (the data divided by the least-squares scale of the delta
+#' model selected for that group) and, when a response latency is estimated,
+#' shifted by that group's fitted lag. The selected curve is therefore the
+#' one the data are fitted to, and visual inspection and formal selection
+#' use the same scaling.
+#'
 #' @param sim A \code{"phonActivR_sim"} object.
 #' @param empirical_data A data.frame with columns:
 #'   \describe{
@@ -333,36 +344,79 @@ plot_onset_timing <- function(sim,
 #'   \code{\link{plot_asymmetry}}.
 #' @param title Character. Optional title. If \code{NULL} (the default) no
 #'   title is drawn inside the image; figure titles belong in the caption.
-#' @param fit Logical. If \code{TRUE} (the default), the best-fitting delta
-#'   for each empirical group is estimated formally via
-#'   \code{\link{goodness_of_fit}} (RSS/AIC model comparison); the result is
-#'   printed to the console and the full AIC table is attached to the
-#'   returned plot as the \code{"fit"} attribute (no text is drawn inside
-#'   the image). This replaces visual curve-matching with a quantitative
-#'   selection rule. Set \code{FALSE} to skip.
+#' @param fit Logical. If \code{TRUE} (the default), the selected delta
+#'   for each group is printed to the console and the full
+#'   \code{\link{goodness_of_fit}} table is attached to the returned plot as
+#'   the \code{"fit"} attribute (no text is drawn inside the image). The
+#'   scaling is the same whether or not \code{fit} is \code{TRUE}.
+#' @param time_window Optional length-2 numeric vector passed to
+#'   \code{\link{goodness_of_fit}}; the scale factor (and the reported
+#'   selection) is then estimated on that window only.
+#' @param lag Candidate response latencies passed to
+#'   \code{\link{goodness_of_fit}} (default \code{0:50}). When a latency is estimated,
+#'   each group's empirical curve is drawn shifted left by its fitted lag, so
+#'   its time axis is aligned with the model's (word onset = time 1).
+#' @param show_pre_onset Logical. If \code{FALSE} (the default), empirical
+#'   points that the latency shift moves before the model's time 1 are not
+#'   drawn, because the model makes no prediction there. If \code{TRUE}, they
+#'   are drawn, the x-axis is extended to negative model time, and a dotted
+#'   line marks the model's time 1, so any empirical effect that precedes the
+#'   model's onset stays visible.
+#' @param facet_groups Logical. If \code{FALSE} (the default), all groups are
+#'   drawn in one panel. If \code{TRUE} and \code{empirical_data} has more
+#'   than one group, one panel is drawn per group (each group aligned to its
+#'   own selected delta curve) and the panels are combined side by side with
+#'   patchwork and tagged A, B, ...; this is the layout of Figure 6A-B in the
+#'   tutorial.
 #'
-#' @return A ggplot2 object. When \code{fit = TRUE}, the object carries a
-#'   \code{"fit"} attribute (the \code{\link{goodness_of_fit}} table, whose
-#'   own \code{"best_delta"} attribute gives the selected delta per group).
+#' @return A ggplot2 object (or a patchwork object when
+#'   \code{facet_groups = TRUE} with several groups). When \code{fit = TRUE},
+#'   the object carries a \code{"fit"} attribute (the
+#'   \code{\link{goodness_of_fit}} table, whose own \code{"best_delta"}
+#'   attribute gives the selected delta per group).
 #' @export
 overlay_empirical <- function(sim,
                               empirical_data,
                               group_colors = NULL,
                               delta_colors = NULL,
                               title = NULL,
-                              fit = TRUE) {
+                              fit = TRUE,
+                              time_window = NULL,
+                              lag = 0:50,
+                              show_pre_onset = FALSE,
+                              facet_groups = FALSE) {
 
   stopifnot(inherits(sim, "phonActivR_sim"))
   stopifnot(is.data.frame(empirical_data))
   stopifnot("time" %in% names(empirical_data))
+  if (!"asymmetry" %in% names(empirical_data) &&
+      all(c("cv_effect", "c_effect") %in% names(empirical_data))) {
+    empirical_data$asymmetry <- empirical_data$cv_effect - empirical_data$c_effect
+  }
   stopifnot("asymmetry" %in% names(empirical_data))
-
-  # Normalize empirical data to simulation scale
-  sim_max <- max(sim$results[[as.character(max(sim$params$delta_values))]]$asymmetry,
-                 na.rm = TRUE)
 
   if (!"group" %in% names(empirical_data)) {
     empirical_data$group <- "Empirical"
+  }
+
+  # One panel per group: draw each group on its own, then combine.
+  if (isTRUE(facet_groups) && length(unique(empirical_data$group)) > 1) {
+    groups <- unique(empirical_data$group)
+    panels <- lapply(groups, function(g) {
+      overlay_empirical(sim, empirical_data[empirical_data$group == g, ],
+                        group_colors = group_colors, delta_colors = delta_colors,
+                        title = title, fit = FALSE, time_window = time_window,
+                        lag = lag, show_pre_onset = show_pre_onset,
+                        facet_groups = FALSE)
+    })
+    fit_table <- if (isTRUE(fit)) {
+      goodness_of_fit(sim, empirical_data, time_window = time_window,
+                      lag = lag, verbose = FALSE)
+    } else NULL
+    p <- patchwork::wrap_plots(panels, ncol = 2, guides = "collect") +
+      patchwork::plot_annotation(tag_levels = "A")
+    attr(p, "fit") <- fit_table
+    return(p)
   }
 
   groups <- unique(empirical_data$group)
@@ -373,14 +427,26 @@ overlay_empirical <- function(sim,
     )
   }
 
-  # Normalize each group
+  # Fit every delta model to every group (least-squares scale per model);
+  # each group is drawn with the scale factor of its selected delta model,
+  # so the overlay shows exactly what was fitted.
+  fit_table <- goodness_of_fit(sim, empirical_data,
+                               time_window = time_window, lag = lag,
+                               verbose = FALSE)
+  best <- attr(fit_table, "best_delta")
+
   emp_norm <- dplyr::bind_rows(lapply(groups, function(g) {
     gd <- empirical_data[empirical_data$group == g, ]
-    emp_max <- max(abs(gd$asymmetry), na.rm = TRUE)
-    scale_factor <- if (emp_max > 0) sim_max / emp_max else 1
+    ft <- fit_table[fit_table$group == g, ]
+    b   <- ft$scale[ft$delta == best[[g]]]
+    lg  <- ft$lag[ft$delta == best[[g]]]
+    # Draw the data in model units (divide by the model's fitted scale) and
+    # shift it left by the fitted response latency, so the group sits on
+    # its selected delta curve exactly as it was fitted.
+    scale_factor <- if (b > 0) 1 / b else 1
 
     out <- data.frame(
-      time      = gd$time,
+      time      = gd$time - lg,
       asymmetry = gd$asymmetry * scale_factor,
       group     = g
     )
@@ -390,9 +456,19 @@ overlay_empirical <- function(sim,
     }
     out
   }))
+  # Points shifted before word onset carry no model prediction; they are
+  # dropped unless show_pre_onset = TRUE.
+  if (!isTRUE(show_pre_onset)) emp_norm <- emp_norm[emp_norm$time >= 1, ]
 
   # Build base asymmetry plot
   p <- plot_asymmetry(sim, delta_colors = delta_colors, title = title)
+  if (isTRUE(show_pre_onset) && min(emp_norm$time) < 1) {
+    lo <- 20 * floor((min(emp_norm$time) - 1) / 20)
+    p <- suppressMessages(p + ggplot2::scale_x_continuous(
+      breaks = seq(lo, 100, 20), labels = paste0(seq(lo, 100, 20), "%"))) +
+      ggplot2::geom_vline(xintercept = 1, linetype = "dotted",
+                          color = "grey40")
+  }
 
   # Add empirical layers
   for (g in groups) {
@@ -427,22 +503,17 @@ overlay_empirical <- function(sim,
       )
   }
 
-  # --- Optional formal fit: replace eyeballing with AIC model selection ----
-  # The selection result is reported to the console and attached to the
-  # returned plot; nothing is drawn inside the image, so the figure stays
-  # publication-clean (titles and interpretive notes belong in the caption).
-  fit_table <- NULL
+  # --- Report the selection (console only; nothing drawn in the image) ---
   if (isTRUE(fit)) {
-    # Run the RSS/AIC comparison quietly for each group
-    quiet_out <- utils::capture.output(
-      fit_table <- suppressMessages(goodness_of_fit(sim, empirical_data))
-    )
-    best <- attr(fit_table, "best_delta")
     best_txt <- paste0(names(best), ": best-fitting \u03b4 = ", best,
                        collapse = " | ")
     cli::cli_alert_info(
-      paste0("AIC model selection \u2014 ", best_txt,
-             " (full table: attr(plot, 'fit'))"))
+      paste0("Model selection (least-squares scale, lowest RSS/AIC) \u2014 ",
+             best_txt, " (full table: attr(plot, 'fit')). ",
+             "Check the C component with fit_components() before ",
+             "interpreting \u03b4."))
+  } else {
+    fit_table <- NULL
   }
 
   attr(p, "fit") <- fit_table

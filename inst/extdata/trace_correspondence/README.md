@@ -1,7 +1,7 @@
 # Quantitative correspondence with the ORIGINAL C implementation of TRACE
 
 This folder contains the complete, reproducible correspondence study
-reported in the tutorial's Validation 6: phonActivR's item-level
+reported in the tutorial's Validation 1: phonActivR's item-level
 competition predictions against the **original C implementation of
 TRACE** (McClelland & Elman, 1986), run with the classic p86 parameter
 file and the full 213-word `slex` lexicon.
@@ -44,24 +44,21 @@ redistributed here; the patch, the drivers, and all extracted data are.
   robustness sweep (no C binary needed): Luce choice-rule linking on the
   TRACE side (fixed k = 7; Allopenna et al., 1998, introduced the Luce
   linking for TRACE with a time-growing k — results are insensitive to
-  this choice: rho = .82 across k = 4–10, .85 on raw activations); the package's own
+  this choice: rho = .82 across k = 4–10, .84 on raw activations); the package's own
   competitor-type conventions with TRACE-feature-derived overlaps on the
   phonActivR side.
 - `correspondence_results.csv` -- the per-item measures.
 
-## Headline results (reproduced by the analysis script)
+## Headline results (reproduced by the analysis script; package 0.3.0)
 
-- Item-level peak competition magnitude: Spearman rho = .82,
-  p = 7.5e-07 (Pearson r = .61, p = .0015), n = 24.
-- Competition timing ordering reproduced: cohort competition early in
-  both models; the one rhyme item for which original TRACE generates
-  measurable competition (lid-rid, featurally similar onsets) peaks
-  late in both models (TRACE onset cycle 34 of 90; phonActivR step 32
-  of 101).
-- Documented divergence: on the full 213-word lexicon, original
-  TRACE's raw word activations show essentially no rhyme competition
-  (7 of 8 rhyme items at floor even after Luce linking) -- consistent
-  with Allopenna et al.'s (1998) demonstration that raw TRACE
-  underpredicts empirical rhyme competition. phonActivR's rhyme
-  convention instead follows the empirically observed late rhyme time
-  course, which is its stated purpose.
+- Item-level peak competition: Spearman rho = .82 (Pearson r = .67),
+  n = 24. This reflects the class ordering (cohort > rhyme > unrelated),
+  not item-level correspondence: a code for competitor class alone
+  correlates rho = .86 with the TRACE peaks, and within classes the two
+  models do not agree (cohort rho = .05, rhyme rho = .16).
+- Rhyme magnitude diverges: phonActivR predicts rhyme peaks of .33-.48
+  (61-88% of its cohort peaks); original TRACE shows measurable rhyme
+  competition for only one of eight items (lid-rid).
+- Robustness: rho = .82 for Luce k = 4-10, .84 on raw activations, and
+  .80-.83 for segment durations of 6-14 steps (set SEG_STEPS before
+  sourcing the script).

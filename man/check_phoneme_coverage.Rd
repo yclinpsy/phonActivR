@@ -36,7 +36,11 @@ Invisibly, a character vector of uncovered phoneme labels. When
   a \code{similarity_matrix} is supplied, the result also carries a
   \code{"missing_pairs"} attribute listing compared phoneme pairs that
   would silently receive the default similarity (see Details).
-  (length 0 when coverage is complete).
+  (length 0 when coverage is complete). The \code{"identical_pairs"}
+  attribute lists compared pairs of different phonemes that the feature
+  matrix does not distinguish (they receive similarity 1) and that the
+  similarity matrix does not override; they are reported with a console
+  message when \code{announce = TRUE}.
 }
 \description{
 Reports which phonemes in a stimulus set are not covered by the active

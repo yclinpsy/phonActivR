@@ -23,6 +23,19 @@
 #' For phonemes or contrasts it cannot express, supply direct pairwise
 #' values via \code{\link{custom_similarity}}.
 #'
+#' @section Resolution (identical vectors):
+#' Seven binary dimensions cannot separate 39 phonemes: the matrix has 22
+#' distinct vectors. The following phonemes share a vector and therefore
+#' have similarity 1 with each other: p = ch; b = jh; f = th; v = dh;
+#' ah = ao = aw = ow = oy = uh = uw = aa; y = eh = er = ey;
+#' ae = ay = ih = iy. Stimulus sets whose contrasts rely on these
+#' distinctions (e.g., a control that differs from the target only in
+#' /b/ versus /dZ/) need \code{\link{custom_similarity}} values for those
+#' pairs. In the bundled 42-item set, two controls are affected (the CV
+#' control of \emph{budget}, \emph{jump}, and the C control of
+#' \emph{jacket}, \emph{boy}); their overlap equals that of the
+#' corresponding competitor.
+#'
 #' @return A named list of numeric vectors, each of length 7 (+1/-1 values).
 #' @references
 #' McClelland, J. L., & Elman, J. L. (1986). The TRACE model of speech
@@ -148,8 +161,9 @@ custom_similarity <- function(pairs) {
 #' Compute Phoneme Similarity Using Features or a Custom Similarity Matrix
 #'
 #' Calculates the similarity between two phonemes. By default, this is the
-#' proportion of matching feature values in the McClelland-Elman (1986)
-#' 7-feature matrix, returning a value in [0, 1]. Alternatively, a
+#' proportion of matching feature values in the package's binary adaptation
+#' of the seven McClelland-Elman (1986) feature dimensions
+#' (\code{\link{trace_features}}), returning a value in [0, 1]. Alternatively, a
 #' user-supplied \code{similarity_matrix} (see \code{\link{custom_similarity}})
 #' takes precedence, allowing direct specification of cross-linguistic
 #' similarities for phonemes outside the built-in English feature set.
@@ -211,13 +225,41 @@ phoneme_similarity <- function(p1, p2,
 #' Compute Phonological Overlap Between Two Words
 #'
 #' Calculates phonological overlap between a target word and a competitor/control
-#' word based on their onset transcriptions and overlap type. Uses the TRACE
-#' 7-feature matrix for phoneme-level similarity computation.
+#' word based on transcriptions of their initial segments and the overlap
+#' type. Phoneme similarities come from the binary feature adaptation
+#' (\code{\link{trace_features}}) or a custom similarity matrix.
 #'
 #' @param target_onset Character vector. Phoneme transcription of the target
 #'   word onset (e.g., \code{c("b", "eh")} for "bench").
 #' @param competitor_onset Character vector. Phoneme transcription of the
 #'   competitor/control word onset.
+#' @section Overlap rules:
+#' \describe{
+#'   \item{C}{Similarity of the initial consonants multiplied by
+#'     \code{c_weight} (default 0.5). The C competitor matches one of the
+#'     two segments (C and V) over which a CV competitor is scored, so by
+#'     default a perfect C match scores half a perfect CV match; the
+#'     competitor's vowel is not consulted. Because the input window already
+#'     limits a C competitor to one segment, the default weight partly counts
+#'     the partial match twice; it is kept for continuity with earlier
+#'     versions, and its value affects the C curve's height and width, so
+#'     vary it as a robustness check.}
+#'   \item{CV}{Mean of the consonant and vowel similarities (vowel
+#'     similarity 0.5 if either word lacks a transcribed vowel).}
+#'   \item{CVC}{Mean similarity over the first three segments.}
+#'   \item{syllable}{Mean similarity over all transcribed segments,
+#'     weighted by the proportion of the longer transcription covered.}
+#' }
+#' The overlap sets the strength of a competitor's input; how long the
+#' input lasts is set separately by \code{\link{shared_segments}} and
+#' \code{seg_steps}. Together, the 0.5 rule and the one-segment window
+#' fix the model's C/CV amplitude ratio; \code{fit_components(...,
+#' shared_scale = FALSE)} fits the C curve with its own scale when that
+#' ratio should not be tested.
+#'
+#' @param c_weight Numeric in (0, 1]. Weight of a C (consonant-only) match
+#'   relative to a full consonant match (default 0.5): the C overlap is the
+#'   consonant similarity times \code{c_weight}; see Overlap rules.
 #' @param overlap_type Character. One of:
 #'   \describe{
 #'     \item{"C"}{Consonant-only overlap (single onset consonant shared)}
@@ -242,7 +284,9 @@ phoneme_similarity <- function(p1, p2,
 compute_overlap <- function(target_onset, competitor_onset,
                             overlap_type = c("C", "CV", "CVC", "syllable"),
                             features = trace_features(),
-                            similarity_matrix = NULL) {
+                            similarity_matrix = NULL,
+                            c_weight = 0.5) {
+  stopifnot(is.numeric(c_weight), c_weight > 0, c_weight <= 1)
   overlap_type <- match.arg(overlap_type)
 
   # Small wrapper so every phoneme comparison below uses the same feature
@@ -254,10 +298,10 @@ compute_overlap <- function(target_onset, competitor_onset,
 
   switch(overlap_type,
     "C" = {
-      # Consonant-only overlap: compare just the first (onset) consonant.
-      # The result is scaled by 0.5 because only one of the two onset
-      # positions (C but not V) is shared with the target.
-      psim(target_onset[1], competitor_onset[1]) * 0.5
+      # Consonant-only overlap: compare just the first (onset) consonant,
+      # scaled by c_weight (default 0.5: one of the two positions, C but
+      # not V, over which a CV competitor is scored).
+      psim(target_onset[1], competitor_onset[1]) * c_weight
     },
     "CV" = {
       # Consonant-vowel overlap: average the similarity of the onset
@@ -317,7 +361,11 @@ compute_overlap <- function(target_onset, competitor_onset,
 #'   a \code{similarity_matrix} is supplied, the result also carries a
 #'   \code{"missing_pairs"} attribute listing compared phoneme pairs that
 #'   would silently receive the default similarity (see Details).
-#'   (length 0 when coverage is complete).
+#'   (length 0 when coverage is complete). The \code{"identical_pairs"}
+#'   attribute lists compared pairs of different phonemes that the feature
+#'   matrix does not distinguish (they receive similarity 1) and that the
+#'   similarity matrix does not override; they are reported with a console
+#'   message when \code{announce = TRUE}.
 #' @export
 #' @examples
 #' stim <- example_stimuli_jp()
@@ -370,23 +418,49 @@ check_phoneme_coverage <- function(stimuli,
   # entry in similarity_matrix -- the silent-0.3 case a cross-linguistic
   # user would otherwise never see.
   missing_pairs <- character(0)
+  items <- stimuli$items
+  pair_set <- new.env(parent = emptyenv())
+  add_pairs <- function(w1, w2) {
+    o1 <- stimuli$onsets[[w1]]; o2 <- stimuli$onsets[[w2]]
+    if (is.null(o1) || is.null(o2)) return(invisible())
+    for (k in seq_len(min(length(o1), length(o2)))) {
+      a <- o1[k]; b <- o2[k]
+      key <- paste(sort(c(a, b)), collapse = "-")
+      assign(key, c(a, b), envir = pair_set)
+    }
+  }
+  for (i in seq_len(nrow(items))) {
+    for (col in c("large_comp", "large_ctrl", "small_comp", "small_ctrl")) {
+      add_pairs(items$target[i], items[[col]][i])
+    }
+  }
+
+  # --- Distinct phonemes that the feature matrix does not distinguish ------
+  # Seven binary dimensions give 22 distinct vectors for 39 phonemes, so some
+  # compared pairs (e.g., b-jh) receive similarity 1 although the phonemes
+  # differ. Report them unless the similarity matrix overrides the pair.
+  identical_pairs <- character(0)
+  for (key in ls(pair_set)) {
+    ab <- get(key, envir = pair_set)
+    a <- ab[1]; b <- ab[2]
+    if (a == b || !(a %in% names(features)) || !(b %in% names(features))) next
+    if (!isTRUE(all(features[[a]] == features[[b]]))) next
+    overridden <- !is.null(similarity_matrix) &&
+      a %in% rownames(similarity_matrix) &&
+      b %in% colnames(similarity_matrix) &&
+      !is.na(similarity_matrix[a, b])
+    if (!overridden) identical_pairs <- c(identical_pairs, key)
+  }
+  if (announce && length(identical_pairs) > 0) {
+    cli::cli_alert_info(paste0(
+      length(identical_pairs), " compared pair(s) of different phonemes ",
+      "have identical feature vectors and receive similarity 1: ",
+      paste(sort(identical_pairs), collapse = ", "),
+      ". Supply values with custom_similarity() if these contrasts matter ",
+      "(see ?trace_features)."))
+  }
+
   if (!is.null(similarity_matrix)) {
-    items <- stimuli$items
-    pair_set <- new.env(parent = emptyenv())
-    add_pairs <- function(w1, w2) {
-      o1 <- stimuli$onsets[[w1]]; o2 <- stimuli$onsets[[w2]]
-      if (is.null(o1) || is.null(o2)) return(invisible())
-      for (k in seq_len(min(length(o1), length(o2)))) {
-        a <- o1[k]; b <- o2[k]
-        key <- paste(sort(c(a, b)), collapse = "-")
-        assign(key, c(a, b), envir = pair_set)
-      }
-    }
-    for (i in seq_len(nrow(items))) {
-      for (col in c("large_comp", "large_ctrl", "small_comp", "small_ctrl")) {
-        add_pairs(items$target[i], items[[col]][i])
-      }
-    }
     for (key in ls(pair_set)) {
       ab <- get(key, envir = pair_set)
       a <- ab[1]; b <- ab[2]
@@ -405,12 +479,13 @@ check_phoneme_coverage <- function(stimuli,
         "(e.g., ", paste(shown, collapse = ", "),
         if (length(missing_pairs) > 8) ", ..." else "",
         "). These pairs silently receive the default similarity (0.3). ",
-        "Add them to custom_similarity() -- a symptom of this problem is a ",
-        "max_asymmetry column that is flat across delta values.",
+        "Add them to custom_similarity(); otherwise different stimulus sets ",
+        "can produce nearly identical predicted curves.",
         call. = FALSE
       )
     }
   }
 
-  invisible(structure(missing, missing_pairs = missing_pairs))
+  invisible(structure(missing, missing_pairs = missing_pairs,
+                      identical_pairs = identical_pairs))
 }

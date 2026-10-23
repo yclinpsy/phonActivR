@@ -34,8 +34,9 @@ Numeric value in [0, 1] representing phoneme similarity.
 }
 \description{
 Calculates the similarity between two phonemes. By default, this is the
-proportion of matching feature values in the McClelland-Elman (1986)
-7-feature matrix, returning a value in [0, 1]. Alternatively, a
+proportion of matching feature values in the package's binary adaptation
+of the seven McClelland-Elman (1986) feature dimensions
+(\code{\link{trace_features}}), returning a value in [0, 1]. Alternatively, a
 user-supplied \code{similarity_matrix} (see \code{\link{custom_similarity}})
 takes precedence, allowing direct specification of cross-linguistic
 similarities for phonemes outside the built-in English feature set.

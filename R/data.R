@@ -2,13 +2,21 @@
 # phonActivR: Built-in Example Data
 # =============================================================================
 
-#' Example Japanese-English Bilingual Stimulus Set (42 Items)
+#' Built-in 42-Item English Stimulus Set (Lin et al., 2023)
 #'
-#' A complete stimulus set for testing moraic processing constraints in
-#' Japanese-English bilingual spoken word recognition. Contains 42 target
-#' words, each paired with a CV competitor (sharing onset consonant + vowel
-#' with the target), a C competitor (sharing only the onset consonant),
-#' and matched phonologically unrelated controls for each.
+#' The English stimulus set of Lin, Lin, and Yeh (2023, Experiments 3 and
+#' 4). Contains 42 target words, each paired with a CV competitor (sharing
+#' onset consonant + vowel with the target), a C competitor (sharing only
+#' the onset consonant), and a matched control for each competitor (a CV
+#' control shares the target's vowel but not its onset; a C control shares
+#' none of the target's initial segments). The CV/C contrast makes the set usable for any prosodic-constraint
+#' hypothesis in which the initial CV is the complete unit (e.g., the mora
+#' for Japanese listeners, the syllable body for Mandarin listeners).
+#' \code{example_stimuli()} and \code{example_stimuli_jp()} are identical;
+#' the second name is kept for backward compatibility (it reflects the
+#' Japanese application for which the function was first written). Real
+#' mouse-tracking data for these items are bundled as
+#' \code{\link{lin2023_english}}.
 #'
 #' The stimulus materials are from Lin et al. (2023, Experiments 3 and 4),
 #' who designed and validated the items for mouse-tracking studies of
@@ -29,8 +37,9 @@
 #' and English spoken word recognition. \emph{Journal of Experimental
 #' Psychology: Learning, Memory, and Cognition}, 49(1), 130--176.
 #' @export
+#' @aliases example_stimuli
 #' @examples
-#' stim <- example_stimuli_jp()
+#' stim <- example_stimuli()
 #' sim <- run_simulation(stim)
 #' summary(sim)
 example_stimuli_jp <- function() {
@@ -150,44 +159,190 @@ example_stimuli_jp <- function() {
 }
 
 
-#' Example GAMM Smooth Estimates (Bundled Mouse-Tracking Dataset)
+#' Mouse-Tracking Competition Effects From Lin, Lin, and Yeh (2023)
 #'
-#' A bundled dataset with exactly the structure a researcher would export
-#' after fitting generalized additive mixed models (GAMMs) to mouse-tracking
-#' data: one row per normalized time bin per group, with separate CV and C
-#' competition-effect columns and their standard errors. It allows the
-#' real-data workflow in the tutorial (Application 1) to be run end-to-end
-#' by every reader without access to raw experimental data.
+#' Group-mean competition-effect curves from Experiments 3 and 4 of Lin, Lin,
+#' and Yeh (2023), which used the same 42 English stimulus items that
+#' \code{\link{example_stimuli_jp}} provides. Experiment 3 tested
+#' Chinese--English bilinguals (n = 41) and Experiment 4 English
+#' monolinguals (n = 49) in a mouse-tracking spoken word recognition task.
+#' The dataset is used in the tutorial's real-data application: because the
+#' stimuli are identical, the simulation and the data refer to exactly the
+#' same items.
 #'
-#' The curves were generated from the phonActivR simulation itself (see
-#' \code{data-raw/make_example_gamm.R} in the source repository): the
-#' "JP bilinguals" group was generated with delta = 15 (moraic constraint
-#' present) and the "EN monolinguals" group with delta = 0 (no constraint),
-#' plus temporally correlated noise. Because the generating delta values are
-#' known, readers can verify that \code{\link{goodness_of_fit}} recovers the
-#' correct delta neighborhood for each group.
+#' Effects are differences in time-normalized horizontal mouse position
+#' (control minus competitor x-coordinate; correct trials only), so positive
+#' values mean the trajectory was attracted toward the competitor. The
+#' normalized time axis runs from trial onset to response and therefore
+#' includes pre-response and motor latency; estimate a response latency when
+#' fitting (the \code{lag} argument of \code{\link{goodness_of_fit}}).
+#' Only group means are included here; de-identified participant- and
+#' item-level means are in \code{inst/extdata/lin2023_validation/}.
 #'
 #' @format A data frame with 202 rows and 6 variables:
 #' \describe{
-#'   \item{time}{Integer. Normalized time bin (1--101).}
-#'   \item{CV_effect}{Numeric. CV (larger-grain) competition effect
-#'     (competitor minus control) at this time bin.}
-#'   \item{C_effect}{Numeric. C (smaller-grain) competition effect.}
-#'   \item{CV_se}{Numeric. Standard error of the CV effect.}
-#'   \item{C_se}{Numeric. Standard error of the C effect.}
-#'   \item{group}{Character. "JP bilinguals" (generating delta = 15) or
-#'     "EN monolinguals" (generating delta = 0).}
+#'   \item{time}{Integer. Normalized time step (1--101).}
+#'   \item{cv_effect}{Numeric. CV (larger-grain) competition effect.}
+#'   \item{c_effect}{Numeric. C (smaller-grain) competition effect.}
+#'   \item{asymmetry}{Numeric. \code{cv_effect - c_effect}.}
+#'   \item{group}{Character. "Chinese-English bilinguals" (Experiment 3) or
+#'     "English monolinguals" (Experiment 4).}
+#'   \item{n_subjects}{Integer. Number of participants in the group.}
 #' }
-#' @usage data(example_gamm)
+#' @source Lin, Y.-C., Lin, P.-Y., & Yeh, L.-H. (2023). Syllable or phoneme?
+#'   A mouse-tracking investigation of phonological units in Mandarin Chinese
+#'   and English spoken word recognition. \emph{Journal of Experimental
+#'   Psychology: Learning, Memory, and Cognition, 49}(1), 130--176.
+#'   \doi{10.1037/xlm0001128}. Build script: \code{data-raw/make_lin2023_english.R}.
+#' @usage data(lin2023_english)
 #' @examples
-#' data(example_gamm)
-#' head(example_gamm)
+#' data(lin2023_english)
+#' sim <- run_simulation(example_stimuli_jp(), delta_values = c(0, 10, 20, 30),
+#'                       verbose = FALSE)
+#' gof <- goodness_of_fit(sim, lin2023_english, lag = 0:50)
+"lin2023_english"
+
+
+#' @rdname example_stimuli_jp
+#' @export
+example_stimuli <- function() example_stimuli_jp()
+
+
+#' Built-in 24-Item Mandarin Stimulus Set (Lin et al., 2023, Experiment 1)
 #'
-#' # Convert GAMM-export format to the overlay format (time, asymmetry, se, group)
-#' emp_real <- data.frame(
-#'   time      = example_gamm$time,
-#'   asymmetry = example_gamm$CV_effect - example_gamm$C_effect,
-#'   se        = sqrt(example_gamm$CV_se^2 + example_gamm$C_se^2),
-#'   group     = example_gamm$group
-#' )
-"example_gamm"
+#' The Mandarin monosyllabic stimulus set of Lin, Lin, and Yeh (2023,
+#' Experiment 1), in which Chinese--English bilinguals heard Mandarin words.
+#' Each of the 24 targets is paired with a CV competitor (sharing the onset
+#' consonant and the vowel, e.g., \emph{ba1}--\emph{ban1}), a C competitor
+#' (sharing only the onset consonant, e.g., \emph{ba1}--\emph{bin1}), and one
+#' control word that shares the target's vowel (often its whole rime) but
+#' not its onset (e.g., \emph{pan1}). Unlike the English set
+#' (\code{\link{example_stimuli}}), in which the C control shares nothing
+#' with the target, the same vowel-sharing control serves both competitor
+#' types here, so it is entered as both \code{large_ctrl} and
+#' \code{small_ctrl}; the C competition effect is therefore the attraction
+#' of an onset-sharing word minus that of a vowel-sharing word. In the
+#' experiment, each target was tested with one competitor type (12 targets
+#' with a CV competitor, 12 with a C competitor) and with its control; the
+#' group-mean curves are bundled as \code{\link{lin2023_chinese}}.
+#'
+#' Transcriptions use Pinyin initials and the first vowel letter of the
+#' final as phoneme codes, written in upper case so that they cannot be
+#' confused with the ARPAbet codes of the built-in English feature matrix
+#' (e.g., \emph{ban1} = \code{c("B", "A")}; \emph{zhen3} = \code{c("ZH", "E")}).
+#' These codes are not covered by \code{\link{trace_features}}, so a
+#' similarity table must be supplied; \code{\link{mandarin_similarity}}
+#' provides one. Tone is not represented: within each item, the target and
+#' its competitors share the tone. Coding the first vowel letter of the
+#' final as the vowel is a simplification (e.g., \emph{zhe}--\emph{zhen},
+#' \emph{ya}--\emph{yan} differ in vowel quality). Item codes are those of
+#' Lin et al. (2023).
+#'
+#' @return A \code{"phonActivR_stimuli"} object with 24 items.
+#' @references
+#' Lin, Y.-C., Lin, P.-Y., & Yeh, L.-H. (2023). Syllable or phoneme? A
+#' mouse-tracking investigation of phonological units in Mandarin Chinese
+#' and English spoken word recognition. \emph{Journal of Experimental
+#' Psychology: Learning, Memory, and Cognition}, 49(1), 130--176.
+#' @seealso \code{\link{mandarin_similarity}}, \code{\link{lin2023_chinese}}
+#' @export
+#' @examples
+#' stim_zh <- example_stimuli_zh()
+#' sim_zh <- run_simulation(stim_zh, delta_values = c(0, 10, 20),
+#'                          similarity_matrix = mandarin_similarity(),
+#'                          gate = "truncate", verbose = FALSE)
+example_stimuli_zh <- function() {
+  tab <- utils::read.csv(system.file("extdata", "stimuli_24items_chinese.csv",
+                                     package = "phonActivR"),
+                         stringsAsFactors = FALSE)
+  code <- function(p) {
+    p <- sub("[0-9]$", "", p)
+    ini <- regmatches(p, regexpr("^(zh|ch|sh|[bpmfdtnlgkhjqxrzcsyw])", p))
+    if (length(ini) == 0) ini <- ""
+    rest <- sub(paste0("^", ini), "", p)
+    c(toupper(ini), toupper(substr(rest, 1, 1)))
+  }
+  onsets <- list()
+  for (w in unique(c(tab$target, tab$cv_competitor, tab$control))) onsets[[w]] <- code(w)
+  # The C competitor shares only its onset consonant with the target.
+  c_lab <- paste0(tab$c_competitor, "_C")
+  for (i in seq_len(nrow(tab))) onsets[[c_lab[i]]] <- code(tab$c_competitor[i])[1]
+  create_stimuli(targets    = tab$target,
+                 large_comp = tab$cv_competitor, large_ctrl = tab$control,
+                 small_comp = c_lab,             small_ctrl = tab$control,
+                 onsets = onsets, large_type = "CV", small_type = "C")
+}
+
+
+#' Illustrative Similarity Table for the Mandarin Stimulus Set
+#'
+#' Pairwise similarities for every phoneme pair that the comparisons in
+#' \code{\link{example_stimuli_zh}} generate, in the form accepted by
+#' \code{\link{custom_similarity}}. The rule is deliberately simple:
+#' identical codes have similarity 1; initials that differ only in
+#' aspiration (B/P, D/T, G/K, Z/C, ZH/CH, J/Q) have similarity
+#' \code{aspiration}; every other pair has similarity \code{other}. The
+#' values are illustrative, not measured; researchers should replace them
+#' with values from perceptual confusion data when such data are available.
+#' Because every competitor in the set shares its onset exactly with its
+#' target, these values affect only the controls' input; the fits in the
+#' tutorial do not change when \code{aspiration} and \code{other} are
+#' varied.
+#'
+#' @param aspiration Similarity of initials that differ only in aspiration
+#'   (default 0.7).
+#' @param other Similarity of all other non-identical pairs (default 0.3,
+#'   the package's default similarity).
+#' @return A similarity matrix from \code{\link{custom_similarity}}.
+#' @export
+#' @examples
+#' sm <- mandarin_similarity()
+#' check_phoneme_coverage(example_stimuli_zh(), similarity_matrix = sm)
+mandarin_similarity <- function(aspiration = 0.7, other = 0.3) {
+  stim <- example_stimuli_zh(); on <- stim$onsets; it <- stim$items
+  pairs <- unique(do.call(rbind, lapply(seq_len(nrow(it)), function(i) {
+    t <- on[[it$target[i]]]
+    rbind(cbind(t[1], on[[it$large_comp[i]]][1]), cbind(t[2], on[[it$large_comp[i]]][2]),
+          cbind(t[1], on[[it$large_ctrl[i]]][1]), cbind(t[2], on[[it$large_ctrl[i]]][2]),
+          cbind(t[1], on[[it$small_comp[i]]][1]))
+  })))
+  asp <- c(B = "P", D = "T", G = "K", Z = "C", ZH = "CH", J = "Q")
+  val <- function(a, b) {
+    if (a == b) return(1)
+    if ((!is.na(asp[a]) && asp[a] == b) || (!is.na(asp[b]) && asp[b] == a)) return(aspiration)
+    other
+  }
+  custom_similarity(data.frame(p1 = pairs[, 1], p2 = pairs[, 2],
+                               similarity = mapply(val, pairs[, 1], pairs[, 2]),
+                               stringsAsFactors = FALSE))
+}
+
+
+#' Mandarin-Listening Competition Effects From Lin, Lin, and Yeh (2023)
+#'
+#' Group-mean competition-effect curves from Experiment 1 of Lin, Lin, and
+#' Yeh (2023), in which Chinese--English bilinguals (n = 41) heard the 24
+#' Mandarin monosyllables of \code{\link{example_stimuli_zh}} in the same
+#' mouse-tracking task as the English experiments
+#' (\code{\link{lin2023_english}}). Each target was tested with one
+#' competitor type (12 targets with a CV competitor, 12 with a C competitor)
+#' and with its control, so \code{cv_effect} is computed from the CV targets
+#' and \code{c_effect} from the C targets, each as the control-trial minus
+#' competitor-trial x-coordinate (correct trials only, trial-weighted means
+#' at 101 normalized time steps). Positive values mean attraction toward
+#' the competitor. Participant-level means are in
+#' \code{inst/extdata/lin2023_validation/}.
+#'
+#' @format A data frame with 101 rows and 6 variables, as
+#'   \code{\link{lin2023_english}} (\code{group} = "Chinese-English
+#'   bilinguals (Mandarin)"; \code{n_subjects} = 41).
+#' @source Lin, Y.-C., Lin, P.-Y., & Yeh, L.-H. (2023). Syllable or phoneme?
+#'   A mouse-tracking investigation of phonological units in Mandarin Chinese
+#'   and English spoken word recognition. \emph{Journal of Experimental
+#'   Psychology: Learning, Memory, and Cognition, 49}(1), 130--176.
+#'   \doi{10.1037/xlm0001128}. Build script: \code{data-raw/make_lin2023_chinese.R}.
+#' @usage data(lin2023_chinese)
+#' @examples
+#' data(lin2023_chinese)
+#' max(lin2023_chinese$c_effect) / max(lin2023_chinese$cv_effect)
+"lin2023_chinese"

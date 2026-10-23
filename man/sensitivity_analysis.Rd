@@ -9,7 +9,9 @@ sensitivity_analysis(
   alpha_values = c(0.04, 0.08, 0.12),
   decay_values = c(0.01, 0.02, 0.04),
   gamma_values = c(0.02, 0.04, 0.06),
-  delta_values = c(0L, 20L, 40L),
+  seg_values = 10,
+  delta_values = c(0L, 10L, 20L, 30L),
+  min_rms = 0.01,
   verbose = TRUE
 )
 }
@@ -26,8 +28,14 @@ sensitivity_analysis(
 \item{gamma_values}{Numeric vector. Lateral inhibition strengths to test
 (default: \code{c(0.02, 0.04, 0.06)}).}
 
+\item{seg_values}{Numeric vector. Segment durations (\code{seg_steps}) to
+test (default: \code{10}).}
+
 \item{delta_values}{Integer vector. Delta values to test at each parameter
-combination (default: \code{c(0, 20, 40)}).}
+combination; 0 is added if absent (default: \code{c(0, 10, 20, 30)}).}
+
+\item{min_rms}{Numeric. RMS difference below which two curves count as
+indistinguishable (default 0.01 activation units).}
 
 \item{verbose}{Logical. Print progress (default: TRUE).}
 }
@@ -36,25 +44,43 @@ A list of class \code{"phonActivR_sensitivity"} containing:
   \describe{
     \item{grid}{Data frame of parameter combinations tested}
     \item{results}{List of simulation objects, one per grid row}
-    \item{summary}{Data frame with peak asymmetry and curve ordering
-      for each parameter combination and delta value}
-    \item{robust}{Logical. TRUE if the delta ordering (asymmetry gradient)
-      is never reversed (non-decreasing) across all parameter
-      combinations; exact ties under saturating regimes still count as
-      robust and are reported separately in the console output}
+    \item{summary}{Data frame with peak asymmetry and divergence from the
+      delta = 0 curve for each combination and delta value}
+    \item{robust}{Logical. TRUE if, in every combination, every delta > 0
+      is distinguishable both from delta = 0 and from the adjacent smaller
+      delta}
+    \item{n_undetectable}{Number of combinations in which some delta > 0
+      is within \code{min_rms} of the delta = 0 curve}
+    \item{n_unresolved}{Number of combinations in which some pair of
+      adjacent delta values is within \code{min_rms} of each other}
   }
 }
 \description{
 Runs the simulation across a grid of activation parameters (alpha, decay,
-gamma) to verify that the qualitative effect of the delta parameter is
-robust and not an artifact of specific parameter settings.
+gamma) and segment durations (\code{seg_steps}) and asks, for every grid
+cell, how distinguishable each delta model is from the universalist
+(delta = 0) model. Distinguishability is the root-mean-square difference
+between the delta curve and the delta = 0 asymmetry curve
+(\code{divergence}); a delta that leaves the curve unchanged has
+divergence 0 and cannot be detected in that regime, whatever the data.
+}
+\details{
+Peak asymmetry and divergence are not monotone functions of delta: once
+the gate delays sub-prosodic input past the larger-grain competitor's
+disambiguation point, the two competitions no longer overlap in time, and
+a larger delta only moves the sub-prosodic competition later. The analysis
+therefore asks two questions per grid cell: is every delta > 0
+distinguishable from delta = 0 (\code{divergence}), and is every delta
+distinguishable from the next smaller delta in the grid
+(\code{adjacent_divergence}, the RMS difference between the two curves)?
+A value below \code{min_rms} counts as not distinguishable.
 }
 \examples{
 stim <- example_stimuli_jp()
 sens <- sensitivity_analysis(stim,
   alpha_values = c(0.04, 0.08),
-  decay_values = c(0.01, 0.02),
+  decay_values = c(0.02),
   gamma_values = c(0.04),
   delta_values = c(0, 20))
-sens$robust
+sens$summary
 }

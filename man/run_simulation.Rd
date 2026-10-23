@@ -15,6 +15,11 @@ run_simulation(
   ctrl_scaling = 0.15,
   features = trace_features(),
   similarity_matrix = NULL,
+  seg_steps = 10,
+  residual_input = 0,
+  gate = c("delay", "truncate"),
+  c_weight = 0.5,
+  small_ctrl_type = NULL,
   verbose = TRUE,
   seed = NULL
 )
@@ -48,12 +53,51 @@ in this matrix take precedence over the feature-based computation. This
 is the recommended route for cross-linguistic stimulus sets containing
 phonemes outside the built-in feature matrix.}
 
+\item{seg_steps}{Numeric. Normalized time steps per phonological segment
+(default 10). Sets the disambiguation point of each competitor: it
+receives input only while the segments it shares with the target unfold
+(see \code{\link{run_item}}), so competition rises and then resolves.
+The default assumes that one segment occupies about 10\% of a
+normalized trial (a 3--4-segment word of roughly 400--500 ms within
+trials of about 1.0--1.3 s); check the sensitivity of conclusions to
+this value (e.g., 6--14). \code{Inf} reproduces the
+0.2.x dynamics, in which competitor input never ends.}
+
+\item{residual_input}{Numeric in [0, 1] (default 0). Fraction of each
+competitor's (and control's) input that continues for one more segment
+after its shared segments end. 0 stops input at the disambiguation point;
+1 means a competitor is rejected only one segment after its first
+mismatching segment begins. In held-out-item tests on Lin et al. (2023),
+a value of 1 improved the fit to the C competition for English
+monolinguals; see the manuscript, Step 6b.}
+
+\item{gate}{Character, \code{"delay"} (default) or \code{"truncate"}.
+How the prosodic gate treats the smaller-grain competitor: a buffered
+delay (the whole support window moves with delta) or a signal-locked
+truncation (only the part of the shared segment heard after the gate
+opens supports the competitor). See \code{\link{run_item}}.}
+
+\item{c_weight}{Numeric in (0, 1]. Weight of a C (consonant-only) match
+relative to a full consonant match (default 0.5): the C overlap is the
+consonant similarity times \code{c_weight}; see
+\code{\link{compute_overlap}}. It sets the strength of the C
+competitor's input and should be varied as a robustness check.}
+
+\item{small_ctrl_type}{\code{NULL} (default) or an overlap type
+(\code{"C"}, \code{"CV"}, \code{"CVC"}, \code{"syllable"}) used to
+score the smaller-grain competitor's control. By default the control is
+scored with \code{small_type}, so a C control's overlap is its onset
+similarity times \code{c_weight}. Set \code{"CV"} when the C control
+shares the target's vowel (as in the Mandarin set,
+\code{\link{example_stimuli_zh}}), so that its vowel match enters its
+input; a sensitivity check for such designs.}
+
 \item{verbose}{Logical. Print progress messages (default: TRUE).}
 
-\item{seed}{Integer or NULL. Random seed for reproducibility (default: NULL).
-Set to an integer (e.g., \code{seed = 1234}) to produce identical results
-across sessions. When \code{NULL}, each call may produce slightly different
-onset timing values due to floating-point order.}
+\item{seed}{Ignored. The simulation is deterministic (identical input
+always gives identical output), so no random seed is needed; the
+argument is kept so that code written for earlier versions still runs,
+and it does not change the global random-number stream.}
 }
 \value{
 A list of class \code{"phonActivR_sim"} containing:

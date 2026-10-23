@@ -186,7 +186,7 @@ test_that("power_guidance returns correct structure for 4 delta values", {
   pg   <- power_guidance(sim, n_items = 42, n_participants = 24)
   # Should return one row per adjacent delta pair
   expect_equal(nrow(pg), 3)
-  expect_true(all(c("delta_low", "delta_high", "peak_asym_diff",
+  expect_true(all(c("delta_low", "delta_high", "max_curve_diff",
                     "approx_d", "power_rating") %in% names(pg)))
   expect_true(all(pg$power_rating %in%
     c("likely sufficient", "marginal", "likely insufficient", "indeterminate")))
@@ -296,6 +296,29 @@ test_that("overlay_empirical(fit = TRUE) attaches the AIC fit table", {
   expect_true("aic" %in% names(attr(p, "fit")))
 })
 
+test_that("overlay draws each group at the scale of its selected delta", {
+  stim <- example_stimuli_jp()
+  sim  <- run_simulation(stim, delta_values = c(0, 10, 20, 30), verbose = FALSE)
+  emp  <- example_empirical(sim, true_delta = 20, seed = 5)
+  out  <- utils::capture.output(p <- overlay_empirical(sim, emp, fit = TRUE))
+  ft   <- attr(p, "fit")
+  best <- attr(ft, "best_delta")
+  g1   <- names(best)[1]
+  s1   <- ft$scale[ft$group == g1 & ft$delta == best[[g1]]]
+  # the empirical layer for g1 is the raw curve times the fitted scale
+  lay  <- Filter(function(l) inherits(l$geom, "GeomLine") &&
+                   is.data.frame(l$data) && nrow(l$data) > 0 &&
+                   all(l$data$group == g1), p$layers)
+  expect_true(length(lay) >= 1)
+  expect_equal(lay[[1]]$data$asymmetry,
+               emp$asymmetry[emp$group == g1] / s1)
+  # least-squares scale of the model: no other scale gives a smaller RSS
+  m  <- sim$results[[as.character(best[[g1]])]]$asymmetry
+  e  <- emp$asymmetry[emp$group == g1]
+  rss <- function(k) sum((e - k * m)^2)
+  expect_lte(rss(s1), rss(s1 * 1.05)); expect_lte(rss(s1), rss(s1 * 0.95))
+})
+
 test_that("cohort_rhyme_benchmark passes all five qualitative checks", {
   bench <- cohort_rhyme_benchmark(verbose = FALSE)
   expect_true(bench$cohort_gt_unrelated)
@@ -306,24 +329,54 @@ test_that("cohort_rhyme_benchmark passes all five qualitative checks", {
   expect_true(bench$all_pass)
 })
 
-test_that("example_gamm dataset loads and recovers generating deltas", {
-  data(example_gamm, envir = environment())
-  expect_true(all(c("time", "CV_effect", "C_effect", "CV_se", "C_se",
-                    "group") %in% names(example_gamm)))
-  expect_equal(length(unique(example_gamm$group)), 2)
-  stim <- example_stimuli_jp()
-  sim  <- run_simulation(stim, delta_values = c(0, 10, 20, 30), verbose = FALSE)
-  emp_real <- data.frame(
-    time      = example_gamm$time,
-    asymmetry = example_gamm$CV_effect - example_gamm$C_effect,
-    group     = example_gamm$group
-  )
-  out <- utils::capture.output(gof <- goodness_of_fit(sim, emp_real))
-  best <- attr(gof, "best_delta")
-  # JP group was generated at delta = 15 -> should select 10 or 20;
-  # EN group was generated at delta = 0 -> should select 0
-  expect_true(best[["JP bilinguals"]] %in% c(10, 20))
-  expect_equal(unname(best[["EN monolinguals"]]), 0)
+test_that("lin2023_english loads and fits with an estimated latency", {
+  data(lin2023_english, envir = environment())
+  expect_equal(nrow(lin2023_english), 202)
+  expect_true(all(c("time", "cv_effect", "c_effect", "asymmetry", "group",
+                    "n_subjects") %in% names(lin2023_english)))
+  expect_equal(lin2023_english$asymmetry,
+               lin2023_english$cv_effect - lin2023_english$c_effect)
+  sim <- run_simulation(example_stimuli_jp(), delta_values = c(0, 10, 20),
+                        verbose = FALSE, seed = 1234)
+  gof <- goodness_of_fit(sim, lin2023_english, lag = 0:50, verbose = FALSE)
+  expect_true(all(gof$n_params == 2))
+  expect_true(all(gof$lag > 0))          # real data need a response latency
+  expect_true(all(gof$r2 > 0.5))         # the time course is reproduced
+})
+
+test_that("competition resolves after the disambiguation point", {
+  sim <- run_simulation(example_stimuli_jp(), delta_values = c(0, 20),
+                        verbose = FALSE, seed = 1234)
+  r0 <- sim$results[["0"]]
+  expect_gt(max(r0$large_effect), 0.3)
+  expect_lt(abs(r0$large_effect[101]), 1e-6)   # returns to baseline
+  legacy <- run_simulation(example_stimuli_jp(), delta_values = 0,
+                           seg_steps = Inf, verbose = FALSE, seed = 1234)
+  expect_gt(legacy$results[["0"]]$large_effect[101], 0.3)  # 0.2.x: never resolves
+})
+
+test_that("shared_segments counts the overlap span", {
+  expect_equal(shared_segments("C"), 1L)
+  expect_equal(shared_segments("CV"), 2L)
+  expect_equal(shared_segments("CVC"), 3L)
+  expect_equal(shared_segments("syllable", c("b", "eh", "l")), 3L)
+})
+
+test_that("run_activation input window ends at overlap_offset", {
+  a <- run_activation(0.8, 0.1, overlap_onset = 1, overlap_offset = 21)
+  expect_gt(a$act_comp[20], a$act_comp[60])
+  b <- run_activation(0.8, 0.1, overlap_onset = 1, overlap_offset = Inf)
+  expect_gt(b$act_comp[101], a$act_comp[101])
+})
+
+test_that("goodness_of_fit scales the model onto the data (no degenerate fit)", {
+  sim <- run_simulation(example_stimuli_jp(), delta_values = c(0, 10),
+                        verbose = FALSE, seed = 1234)
+  flat <- data.frame(time = 1:101, asymmetry = sin(seq(0, pi, length.out = 101)))
+  g <- goodness_of_fit(sim, flat, time_window = c(60, 101), lag = 0,
+                       verbose = FALSE)
+  # the model is ~0 late in the trial: it must NOT get a near-zero RSS
+  expect_gt(min(g$rss), 0.5 * sum(flat$asymmetry[60:101]^2))
 })
 
 test_that("competing-hypothesis: delta=0 and delta=30 produce distinguishable curves", {
@@ -332,9 +385,9 @@ test_that("competing-hypothesis: delta=0 and delta=30 produce distinguishable cu
   sim  <- run_simulation(stim, delta_values = c(0, 30), verbose = FALSE)
   asym_0  <- sim$results[["0"]]$asymmetry
   asym_30 <- sim$results[["30"]]$asymmetry
-  # The peak asymmetry difference should be meaningfully positive
-  peak_diff <- max(asym_30) - max(asym_0)
-  expect_gt(peak_diff, 0.01)
+  # The two hypotheses must yield clearly different curves (RMS difference);
+  # peak asymmetry is not monotone in delta once the competitions separate.
+  expect_gt(sqrt(mean((asym_30 - asym_0)^2)), 0.01)
   # Onset delay: small-grain competitor should activate later at delta=30
   onset_0  <- find_onset(sim$results[["0"]]$small_effect)
   onset_30 <- find_onset(sim$results[["30"]]$small_effect)
@@ -391,4 +444,94 @@ test_that("check_phoneme_coverage flags unspecified custom-custom pairs", {
   expect_no_warning(
     check_phoneme_coverage(stim, similarity_matrix = sim_mat2,
                            warn = TRUE, announce = FALSE))
+})
+
+test_that("residual_input extends competitor support by one segment", {
+  # default (0) is unchanged: input stops at the disambiguation point
+  a0 <- run_activation(0.8, 0.1, overlap_onset = 1, overlap_offset = 21)
+  a0b <- run_activation(0.8, 0.1, overlap_onset = 1, overlap_offset = 21,
+                        residual_input = 0, residual_steps = 10)
+  expect_identical(a0, a0b)
+  # full residual input for 10 steps equals moving the offset by 10 steps
+  a1 <- run_activation(0.8, 0.1, overlap_onset = 1, overlap_offset = 21,
+                       residual_input = 1, residual_steps = 10)
+  a2 <- run_activation(0.8, 0.1, overlap_onset = 1, overlap_offset = 31)
+  expect_equal(a1, a2)
+  expect_error(run_activation(0.8, 0.1, residual_input = 1.5))
+  # in a simulation it widens the C competition and is stored in params
+  st <- example_stimuli()
+  s0 <- run_simulation(st, delta_values = 10, verbose = FALSE)
+  s1 <- run_simulation(st, delta_values = 10, residual_input = 1, verbose = FALSE)
+  width <- function(x) sum(x > max(x) / 2)
+  expect_gt(width(s1$results[["10"]]$small_effect), width(s0$results[["10"]]$small_effect))
+  expect_equal(s1$params$residual_input, 1)
+  expect_equal(s0$params$residual_input, 0)
+})
+
+test_that("Lin et al. (2023) validation files reproduce lin2023_english", {
+  f <- system.file("extdata", "lin2023_validation", "lin2023_item_curves.csv", package = "phonActivR")
+  skip_if(f == "")
+  ic <- utils::read.csv(f, check.names = FALSE)
+  expect_equal(nrow(ic), 2 * 42 * 4)
+  xc <- paste0("X_", 1:101)
+  for (g in unique(ic$group)) {
+    tab <- ic[ic$group == g, ]
+    m <- function(k) { s <- tab$condition == k
+      colSums(as.matrix(tab[s, xc]) * tab$n_trials[s]) / sum(tab$n_trials[s]) }
+    ref <- lin2023_english[lin2023_english$group == g, ]
+    expect_lt(max(abs((m("CV Control") - m("CV")) - ref$cv_effect)), 1e-5)
+    expect_lt(max(abs((m("Onset Control") - m("Onset")) - ref$c_effect)), 1e-5)
+  }
+})
+
+test_that("overlay_empirical can show data shifted before the model's onset", {
+  stim <- example_stimuli()
+  sim <- run_simulation(stim, verbose = FALSE)
+  d <- lin2023_english[lin2023_english$group == unique(lin2023_english$group)[2], ]
+  emp_min_x <- function(p) {
+    is_emp <- vapply(p$layers, function(l)
+      is.data.frame(l$data) && "group" %in% names(l$data) &&
+        inherits(l$geom, "GeomLine"), logical(1))
+    min(p$layers[[which(is_emp)[1]]]$data$time)
+  }
+  p0 <- suppressMessages(overlay_empirical(sim, d, fit = FALSE))
+  p1 <- suppressMessages(overlay_empirical(sim, d, fit = FALSE,
+                                           show_pre_onset = TRUE))
+  expect_gte(emp_min_x(p0), 1)
+  expect_lt(emp_min_x(p1), 1)
+})
+
+test_that("overlay_empirical(facet_groups = TRUE) returns one panel per group", {
+  stim <- example_stimuli()
+  sim <- run_simulation(stim, delta_values = c(0, 10), verbose = FALSE)
+  p <- overlay_empirical(sim, lin2023_english, facet_groups = TRUE, fit = TRUE)
+  expect_s3_class(p, "patchwork")
+  expect_s3_class(attr(p, "fit"), "data.frame")
+  expect_equal(sort(unique(attr(p, "fit")$group)), sort(unique(lin2023_english$group)))
+  # a single group falls back to one ggplot panel
+  one <- lin2023_english[lin2023_english$group == lin2023_english$group[1], ]
+  expect_s3_class(overlay_empirical(sim, one, facet_groups = TRUE, fit = FALSE), "ggplot")
+})
+
+test_that("asymmetry is computed from the components when absent", {
+  stim <- example_stimuli()
+  sim <- run_simulation(stim, delta_values = c(0, 10), verbose = FALSE)
+  d <- lin2023_english[, c("group", "time", "cv_effect", "c_effect")]
+  g1 <- goodness_of_fit(sim, d, verbose = FALSE)
+  g2 <- goodness_of_fit(sim, lin2023_english, verbose = FALSE)
+  expect_equal(g1$r2, g2$r2)
+  expect_error(goodness_of_fit(sim, d[, c("group", "time", "cv_effect")], verbose = FALSE),
+               "cv_effect")
+})
+
+test_that("words without a transcription raise a warning", {
+  onsets <- list(bench = c("b", "eh"), bell = c("b", "eh"), cell = c("s", "eh"),
+                 bark = c("b"))
+  expect_warning(
+    st <- create_stimuli(targets = "bench", large_comp = "bell", large_ctrl = "cell",
+                         small_comp = "bark", small_ctrl = "dark", onsets = onsets,
+                         large_type = "CV", small_type = "C"),
+    "Missing onset transcriptions")
+  expect_warning(run_simulation(st, delta_values = 0, verbose = FALSE),
+                 "no transcription")
 })

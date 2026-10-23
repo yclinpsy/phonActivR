@@ -2,7 +2,7 @@
 % Please edit documentation in R/plotting.R
 \name{plot_onset_timing}
 \alias{plot_onset_timing}
-\title{Plot Onset Timing as Function of Delta (Figure 3 style)}
+\title{Plot Onset Timing as a Function of Delta}
 \usage{
 plot_onset_timing(
   sim,

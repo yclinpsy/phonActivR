@@ -9,7 +9,8 @@ compute_overlap(
   competitor_onset,
   overlap_type = c("C", "CV", "CVC", "syllable"),
   features = trace_features(),
-  similarity_matrix = NULL
+  similarity_matrix = NULL,
+  c_weight = 0.5
 )
 }
 \arguments{
@@ -33,15 +34,46 @@ competitor/control word onset.}
 phoneme similarities (from \code{\link{custom_similarity}}), passed to
 \code{\link{phoneme_similarity}}. Entries in this matrix take precedence
 over the feature-based computation.}
+
+\item{c_weight}{Numeric in (0, 1]. Weight of a C (consonant-only) match
+relative to a full consonant match (default 0.5): the C overlap is the
+consonant similarity times \code{c_weight}; see Overlap rules.}
 }
 \value{
 Numeric value in [0, 1] representing phonological overlap.
 }
 \description{
 Calculates phonological overlap between a target word and a competitor/control
-word based on their onset transcriptions and overlap type. Uses the TRACE
-7-feature matrix for phoneme-level similarity computation.
+word based on transcriptions of their initial segments and the overlap
+type. Phoneme similarities come from the binary feature adaptation
+(\code{\link{trace_features}}) or a custom similarity matrix.
 }
+\section{Overlap rules}{
+
+\describe{
+  \item{C}{Similarity of the initial consonants multiplied by
+    \code{c_weight} (default 0.5). The C competitor matches one of the
+    two segments (C and V) over which a CV competitor is scored, so by
+    default a perfect C match scores half a perfect CV match; the
+    competitor's vowel is not consulted. Because the input window already
+    limits a C competitor to one segment, the default weight partly counts
+    the partial match twice; it is kept for continuity with earlier
+    versions, and its value affects the C curve's height and width, so
+    vary it as a robustness check.}
+  \item{CV}{Mean of the consonant and vowel similarities (vowel
+    similarity 0.5 if either word lacks a transcribed vowel).}
+  \item{CVC}{Mean similarity over the first three segments.}
+  \item{syllable}{Mean similarity over all transcribed segments,
+    weighted by the proportion of the longer transcription covered.}
+}
+The overlap sets the strength of a competitor's input; how long the
+input lasts is set separately by \code{\link{shared_segments}} and
+\code{seg_steps}. Together, the 0.5 rule and the one-segment window
+fix the model's C/CV amplitude ratio; \code{fit_components(...,
+shared_scale = FALSE)} fits the C curve with its own scale when that
+ratio should not be tested.
+}
+
 \examples{
 # CV overlap: "bench" (b, eh) vs "bell" (b, eh) -> high overlap
 compute_overlap(c("b", "eh"), c("b", "eh"), "CV")

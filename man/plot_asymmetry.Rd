@@ -2,7 +2,7 @@
 % Please edit documentation in R/plotting.R
 \name{plot_asymmetry}
 \alias{plot_asymmetry}
-\title{Plot Asymmetry Gradient Across Delta Values (Figure 2 style)}
+\title{Plot Asymmetry Gradient Across Delta Values}
 \usage{
 plot_asymmetry(sim, delta_colors = NULL, title = NULL)
 }

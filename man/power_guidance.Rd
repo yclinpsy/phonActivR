@@ -2,53 +2,62 @@
 % Please edit documentation in R/utils.R
 \name{power_guidance}
 \alias{power_guidance}
-\title{Estimate Minimum Detectable Delta Difference}
+\title{Screening Guidance: How Separable Are Adjacent Delta Hypotheses?}
 \usage{
 power_guidance(
   sim,
   n_items = 42L,
   n_participants = 24L,
   effect_reliability = 0.7,
-  empirical_sd = 0.04
+  empirical_sd = 0.04,
+  scale = NULL
 )
 }
 \arguments{
 \item{sim}{A \code{"phonActivR_sim"} object from \code{\link{run_simulation}}.}
 
-\item{n_items}{Integer. Number of stimulus items per condition (default: 42).}
+\item{n_items}{Integer. Number of stimulus items per condition (default:
+42). Reported in the output for documentation only: the number of
+items does not enter the computation. If item sampling matters, reflect
+it in \code{effect_reliability} (e.g., via Spearman--Brown from pilot
+item-level reliability).}
 
 \item{n_participants}{Integer. Number of participants per group (default: 24).}
 
-\item{effect_reliability}{Numeric in (0,1). Estimated test-retest reliability
-of the empirical asymmetry measure (default: 0.70, a conservative estimate
-for GAMM-based mouse-tracking data). Higher reliability increases power.}
+\item{effect_reliability}{Numeric in (0,1). Estimated reliability of the
+empirical asymmetry measure (default: 0.70).}
 
-\item{empirical_sd}{Numeric > 0. Assumed between-participant standard
-deviation of the empirical peak asymmetry, on the same normalized
-activation scale as the simulation output (default: 0.04, a conservative
-value chosen so that the ~0.02 peak-asymmetry difference that published
-GAMM mouse-tracking studies typically resolve corresponds to a medium
-standardized effect). The model's own item-level standard errors are NOT
-used here: the simulation is nearly deterministic, so its internal SEs
-approach zero and would produce meaninglessly large standardized effect
-sizes. The empirical noise that limits detection comes from participants,
-not from the model; researchers with pilot data should replace the
-default with the observed SD of their group-level peak asymmetry.}
+\item{empirical_sd}{Numeric > 0. Assumed between-participant SD of the
+empirical asymmetry at its peak (default: 0.04). In data units when
+\code{scale} is given; otherwise in model units.}
+
+\item{scale}{Numeric > 0 or \code{NULL} (default). Model-to-data scale
+factor (see Units).}
 }
 \value{
-A data.frame with one row per pair of adjacent delta values,
-  showing the peak asymmetry difference, approximate standardised effect
-  size (Cohen's d analogue), and a qualitative power rating
-  ("likely sufficient", "marginal", or "likely insufficient") given the
-  supplied design parameters.
+A data.frame with one row per pair of adjacent delta values:
+  \code{max_curve_diff} (model units), \code{max_diff_data} (data units,
+  \code{NA} without \code{scale}), \code{approx_d}, \code{expected_z},
+  the design values, and \code{power_rating}.
 }
 \description{
-A lightweight power-guidance utility that uses the simulation output to
-characterise how separable two delta hypotheses are, given a study design.
-This supports quantitative pre-registration: researchers can report the
-minimum delta difference their design is powered to detect before collecting
-data.
+A lightweight planning heuristic that uses the simulation output to
+characterise how separable two adjacent delta hypotheses are, given a
+study design. It is not a power analysis; for formal planning, simulate
+the planned analysis on simulated participants.
 }
+\section{Units}{
+
+The difference between two predicted curves is in the model's activation
+units, whereas a between-participant SD measured in data is in the data's
+units (e.g., normalized x-coordinate). Supply \code{scale}, the
+least-squares factor that maps model units onto data units (the
+\code{scale} column of \code{\link{goodness_of_fit}} on pilot or
+published data), together with an \code{empirical_sd} in data units. If
+\code{scale} is \code{NULL}, \code{empirical_sd} must already be expressed
+in model units.
+}
+
 \section{Four-Level Failure Framework}{
 
 Following Magnuson, Mirman, and Harris (2012; as applied to modeling tools
@@ -56,18 +65,35 @@ by You & Magnuson, 2018), failures to detect a delta difference can
 arise at four levels: (1) \emph{theory level} -- the language-specific
 grain-size hypothesis (after Cutler & Otake's, 1994, language-specific
 listening proposal) is wrong; (2) \emph{implementation level} -- phonActivR's
-interactive activation equations misrepresent the target theory;
-(3) \emph{parameter level} -- the default alpha/gamma/decay values do not
-apply to the population studied; or (4) \emph{linking-hypothesis level} --
-the empirical paradigm does not map cleanly onto the competition-effect
-quantity. Use the sensitivity analysis workflow (Application 4 in the
-tutorial) to probe levels 3 and 4 before concluding level 1 or 2.
+equations misrepresent the target theory; (3) \emph{parameter level} --
+the default alpha/gamma/decay values do not apply to the population
+studied; or (4) \emph{linking-hypothesis level} -- the empirical paradigm
+does not map cleanly onto the competition-effect quantity. Use
+\code{\link{sensitivity_analysis}}, \code{\link{fit_components}}, and the
+robustness checks of the tutorial vignette to probe levels 3 and 4 before
+concluding level 1 or 2.
+}
+
+\section{How the rating is computed}{
+
+\code{approx_d} is the largest momentary difference between the two
+asymmetry curves (converted to data units with \code{scale}) divided by
+\code{empirical_sd} and attenuated by \code{sqrt(effect_reliability)}.
+\code{expected_z} \eqn{= d \sqrt{n/2}} is the test statistic expected for
+a comparison of two independent groups of \code{n_participants} each. The
+rating uses the conventional benchmarks for a two-sided test at alpha =
+.05: \code{expected_z >= 2.8} (about 80\% power) "likely sufficient",
+\code{>= 2.0} "marginal", otherwise "likely insufficient". The largest
+momentary difference overstates what a whole-curve analysis can detect,
+and time-course analyses have their own error structure, so treat the
+rating as a screening aid.
 }
 
 \examples{
-stim <- example_stimuli_jp()
+stim <- example_stimuli()
 sim  <- run_simulation(stim, delta_values = c(0, 10, 20, 30), verbose = FALSE)
-power_guidance(sim, n_items = 42, n_participants = 24)
+# scale from a fit to pilot data; SD in the data's units
+power_guidance(sim, n_participants = 40, empirical_sd = 0.04, scale = 0.25)
 }
 \references{
 Magnuson, J. S., Mirman, D., & Harris, H. D. (2012). Computational models
@@ -79,7 +105,4 @@ You, H., & Magnuson, J. S. (2018). TISK 1.0: An easy-to-use Python
 implementation of the time-invariant string kernel model of spoken word
 recognition. \emph{Behavior Research Methods}, 50(3), 871--889.
 https://doi.org/10.3758/s13428-017-1012-5
-
-Henninger, F., Malejka, S., & Titz, J. (2025). Contrast analysis for
-competing hypotheses: cofad. \emph{Behavior Research Methods}, 57, 326.
 }

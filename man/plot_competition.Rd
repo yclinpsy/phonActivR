@@ -2,7 +2,7 @@
 % Please edit documentation in R/plotting.R
 \name{plot_competition}
 \alias{plot_competition}
-\title{Plot Competition Effects (Figure 1 style)}
+\title{Plot Competition Effects (Two Panels: Smallest and Largest Delta)}
 \usage{
 plot_competition(
   sim,

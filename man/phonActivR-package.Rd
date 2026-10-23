@@ -6,7 +6,7 @@
 \alias{phonActivR-package}
 \title{phonActivR: Phonological Activation Simulator for Spoken Word Recognition}
 \description{
-A pure-R package for simulating and testing prosodic-constraint (delta)
+A pure-R package for simulating and fitting prosodic-constraint (delta)
 hypotheses about phonological competition in spoken word recognition. Implements a
 compact lateral-inhibition competition model in the interactive-activation family (not TRACE) with built-in phonological overlap computation,
 customizable prosodic constraint parameters, and tools for overlaying

@@ -17,298 +17,430 @@ knitr::opts_chunk$set(
   fig.height = 6,
   dpi = 150
 )
-set.seed(1234)  # Ensures reproducible synthetic data across sessions
 ```
 
 ## Installation
 
 `phonActivR` requires R (>= 4.0.0) and is installed from GitHub using the
-`devtools` package. In your R console or RStudio terminal, run:
+`devtools` package:
 
 ```{r install, eval=FALSE}
-# Install devtools if not already present
 install.packages("devtools")
-
-# Install phonActivR from GitHub. build_vignettes = TRUE makes this
-# tutorial available afterwards via vignette("phonActivR-tutorial")
-devtools::install_github("yclinpsy/phonActivR", build_vignettes = TRUE)
-
-# Load for the current session
+# build_vignettes = TRUE makes this tutorial available afterwards via
+# vignette("phonActivR-tutorial")
+devtools::install_github("yclinpsy/phonActivR@v0.3.0", build_vignettes = TRUE)
 library(phonActivR)
 ```
 
-The package will automatically install its dependencies (`ggplot2`, `dplyr`,
-`patchwork`, `cli`, `rlang`). No Java, no Python, no external configuration is
-required.
+The package installs its dependencies (`ggplot2`, `dplyr`, `patchwork`,
+`cli`, `rlang`, `withr`) automatically. It contains no compiled code and
+needs no Java, Python, or external software.
 
 ## Overview
 
-This vignette demonstrates the complete `phonActivR` workflow, from stimulus
-specification through simulation, visualization, and empirical overlay, using
-the built-in Japanese–English bilingual stimulus set as a worked example.
+This vignette follows the workflow of the accompanying tutorial article,
+from stimulus specification through simulation, visualization, fitting to
+real data, and the checks needed before interpreting delta. It uses the
+built-in 42-item stimulus set of Lin, Lin, and Yeh (2023) and the bundled
+mouse-tracking results for those items. The simulation is deterministic,
+so no random seed is needed; functions that add noise take a `seed`
+argument that is applied locally.
 
 ## Step 1: Load Package and Example Stimuli
 
 ```{r load}
 library(phonActivR)
-
-# Load built-in 42-item stimulus set
-stim <- example_stimuli_jp()
+stim <- example_stimuli()   # built-in 42-item stimulus set
 stim
 ```
 
 ## Step 2: Run Simulation
+
+`gate` chooses how the prosodic gate treats the smaller-grain (C)
+competitor: `"delay"` (default) holds its input for delta steps and then
+supports it for a full segment; `"truncate"` keeps the disambiguation point
+where the signal puts it, so delta removes the part of the input that
+arrives before the gate opens.
 
 ```{r simulate}
 sim <- run_simulation(stim, delta_values = c(0, 10, 20, 30))
 summary(sim)
 ```
 
+The four-value grid keeps the figures readable. For fitting, use a finer
+grid (e.g., `seq(0, 30, 5)`): the grid's resolution can change which delta
+fits best, for the joint fit as well as for the asymmetry fit.
+
 ## Step 3: Visualize Predictions
 
 All plotting functions share the package's publication theme
 (`theme_phonactivr()`) and colorblind-safe Okabe–Ito palette
-(`phonactivr_colors()`), and draw **no titles or subtitles inside the
-image** — figure titles belong in your manuscript's captions, so every
-figure below is journal-ready as produced. Pass a `title` argument only
-if you want one (e.g., for slides), and use the theme on your own plots
-with `+ theme_phonactivr()`.
-
-### Competition Effect Curves
+(`phonactivr_colors()`) and draw no titles inside the image.
 
 ```{r fig1, fig.width=14, fig.height=6.5}
 plot_competition(sim)
 ```
 
-### Asymmetry Gradient
-
 ```{r fig2, fig.width=12, fig.height=6.5}
 plot_asymmetry(sim)
 ```
 
-### Onset Timing
-
 ```{r fig3, fig.width=11, fig.height=6.5}
-plot_onset_timing(sim, mean_trial_ms = 1500)
+plot_onset_timing(sim, mean_trial_ms = 1200)
 ```
 
-## Step 4: Overlay Empirical Data
+## A Successful Run on Synthetic Data
 
-`example_empirical()` is the **recommended starting point** — it generates
-realistic synthetic curves that run identically to real data, so you can
-execute every line without external dependencies. Once you understand the
-workflow, substitute your own data.frame (same columns, no other changes).
+Before fitting real data, it helps to see what a successful application
+looks like. `example_empirical()` generates CV and C curves from the model
+for two groups, one at a chosen delta and one at delta = 0, with
+paradigm-typical noise; the joint fit recovers both values:
 
-Note that `true_delta` encodes a specific competing hypothesis:
-`true_delta = 0` is the universalist prediction; `true_delta > 0` is the
-language-specific grain-size hypothesis (Cutler & Otake, 1994). Specifying this before data collection
-constitutes quantitative pre-registration of the expected temporal effect
-structure (cf. Henninger et al., 2025; BRM TOP Guidelines Level 2).
-
-### Mouse-Tracking Example (Primary Demo Path)
-
-```{r overlay_mt, fig.width=12, fig.height=6.5}
-emp_mt <- example_empirical(sim, true_delta = 15,
-  group_labels = c("JP bilinguals", "EN monolinguals"),
-  paradigm = "mouse-tracking")
-
-overlay_empirical(sim, emp_mt,
-  group_colors = c("JP bilinguals" = "black",
-                   "EN monolinguals" = "grey50"))
+```{r happy-path}
+sim5 <- run_simulation(stim, delta_values = seq(0, 30, 5), verbose = FALSE)
+synth <- example_empirical(sim5, true_delta = 10,
+                           paradigm = "mouse-tracking", seed = 1)
+attr(fit_components(sim5, synth, verbose = FALSE), "best_delta")
 ```
 
-### Eye-Tracking Example (Primary Demo Path — second paradigm)
+On real data the same call is followed by the checks of Step 5, which
+decide whether the selected delta can be interpreted.
 
-```{r overlay_et, fig.width=12, fig.height=6.5}
-emp_et <- example_empirical(sim, true_delta = 12,
-  group_labels = c("L2 learners", "L1 controls"),
-  paradigm = "eye-tracking", noise_sd = 0.02, seed = 99)
+## Step 4: Fit the Predictions to Real Data
 
-overlay_empirical(sim, emp_et,
-  group_colors = c("L2 learners" = "black",
-                   "L1 controls" = "grey50"))
+`lin2023_english` holds the group-mean CV and C competition effects from
+Lin, Lin, and Yeh (2023), Experiment 3 (Chinese--English bilinguals,
+n = 41) and Experiment 4 (English monolinguals, n = 49). Each model is
+scaled onto the data by least squares and shifted by an estimated response
+latency (`lag`, default 0:50 steps), because the model's time axis starts
+at word onset whereas the empirical normalized axis also contains
+pre-response and motor time.
+
+The primary estimator fits the CV and C curves jointly, because delta acts
+only on the C competitor:
+
+```{r components}
+data(lin2023_english)
+fc <- fit_components(sim5, lin2023_english)
+attr(fc, "best_delta")
 ```
 
-## Step 4b: Formal Model Selection (Goodness of Fit)
+Read `r2_c`, the fit to the C component, before interpreting delta. Then
+compare with a model-free reference, a single Gaussian bump:
 
-Visual overlay alone leaves the choice of the best-fitting delta to the eye.
-`goodness_of_fit()` replaces this with a formal RSS/AIC model comparison,
-run separately for each group in the empirical data. (When `fit = TRUE`,
-the default, `overlay_empirical()` already runs this internally, reports
-the selected delta for each group in the console, and attaches the full
-AIC table to the returned plot as `attr(plot, "fit")` — nothing is drawn
-inside the image itself.)
-
-```{r gof}
-gof <- goodness_of_fit(sim, emp_mt)
-attr(gof, "best_delta")
+```{r baseline}
+shape_baseline(lin2023_english)                       # asymmetry
+shape_baseline(lin2023_english, column = "c_effect")  # C component
 ```
 
-Use the `time_window` argument to check that the selected delta is robust
-to the analysis window (e.g., excluding the first 20% of the trial):
+The asymmetry fit ranks the delta models on the CV−C difference, and
+`overlay_empirical()` draws each group exactly as it was fitted:
 
-```{r gof_window}
-gof_win <- goodness_of_fit(sim, emp_mt, time_window = c(21, 101))
-attr(gof_win, "best_delta")
+```{r real_fit, fig.width=12, fig.height=6.5}
+gof <- goodness_of_fit(sim, lin2023_english)
+overlay_empirical(sim, lin2023_english, show_pre_onset = TRUE,
+                  facet_groups = TRUE)
+```
+
+With `show_pre_onset = TRUE`, the part of each empirical curve that the
+latency shift moves before the model's time 1 stays visible; an empirical
+effect there shows that the latency aligns the curves' peaks rather than
+measuring an onset delay.
+
+Read `r2` before `delta_aic`: `delta_aic` only ranks the candidates, and
+because time bins are autocorrelated, large values overstate the evidence.
+
+## Step 5: Checks Before Interpreting Delta
+
+The selected delta should survive reasonable changes to the analysis
+window, the latency search range, the delta grid, and the assumed segment
+duration (`seg_steps`):
+
+```{r robustness}
+goodness_of_fit(sim, lin2023_english, time_window = c(50, 101),
+                verbose = FALSE)[, c("group", "delta", "r2")]
+
+for (ss in c(8, 12)) {
+  sim_ss <- run_simulation(stim, delta_values = seq(0, 30, 5),
+                           seg_steps = ss, verbose = FALSE)
+  print(attr(fit_components(sim_ss, lin2023_english, verbose = FALSE),
+             "best_delta"))
+}
+```
+
+The two readings of the gate make different predictions for the C curve,
+which the joint fit can compare:
+
+```{r gates}
+sim_tr <- run_simulation(stim, delta_values = seq(0, 30, 5),
+                         gate = "truncate", verbose = FALSE)
+attr(fit_components(sim_tr, lin2023_english, verbose = FALSE), "best_delta")
+```
+
+The strength of the C input (`c_weight`, default 0.5) shapes the C curve's
+height and width, and the joint fit's delta depends on it; vary it, and
+compare the shared-scale fit with a fit in which the C curve has its own
+scale:
+
+```{r cweight}
+sim_cw <- run_simulation(stim, delta_values = seq(0, 30, 5),
+                         c_weight = 0.8, verbose = FALSE)
+fc_cw <- fit_components(sim_cw, lin2023_english, verbose = FALSE)
+attr(fc_cw, "best_delta")
+max(fc_cw$r2_c[fc_cw$group == unique(fc_cw$group)[1]])
+attr(fit_components(sim_cw, lin2023_english, shared_scale = FALSE,
+                    verbose = FALSE), "best_delta")
+```
+
+Participant-level resampling shows how stable the selected delta is.
+`bootstrap_delta()` takes a table of participant-level mean trajectories
+(one row per participant and condition, with `n_trials` and `X_1`..`X_101`),
+refits every resample, and tabulates the selected delta:
+
+```{r bootstrap}
+sc <- read.csv(system.file("extdata", "lin2023_validation",
+                           "lin2023_subject_curves.csv", package = "phonActivR"),
+               check.names = FALSE)
+bootstrap_delta(sim5, sc, n_boot = 100, seed = 1)
+```
+
+The package also ships the item-level mean trajectories and a script that
+runs the full bootstrap, held-out item splits, and recovery under
+misspecification:
+
+```{r validation_files}
+list.files(system.file("extdata", "lin2023_validation",
+                       package = "phonActivR"))
+```
+
+`validation.R` reads and writes files in its working directory, so copy the
+folder somewhere writable before running it (it takes 40-60 minutes):
+
+```{r validation_copy, eval=FALSE}
+file.copy(system.file("extdata", "lin2023_validation", package = "phonActivR"),
+          ".", recursive = TRUE)
+setwd("lin2023_validation"); source("validation.R")
+```
+
+## Step 6: Checking the Estimators on Synthetic Data
+
+`example_empirical()` generates CV, C, and asymmetry curves from the model
+at a known delta and adds temporally correlated noise. `generate_with`
+generates the data from a different model than the one being fitted, so
+recovery can be checked under misspecification:
+
+```{r synthetic, fig.width=12, fig.height=6.5}
+emp_syn <- example_empirical(sim, true_delta = 20,
+  group_labels = c("Group A", "Group B"), paradigm = "mouse-tracking")
+overlay_empirical(sim, emp_syn)
+parameter_recovery(sim, true_delta = 10, n_replications = 20,
+                   method = "components", lag = 0:50)
+parameter_recovery(sim, true_delta = 0, n_replications = 20,
+                   method = "components", lag = 0:50,
+                   generate_with = list(residual_input = 1))
 ```
 
 ## Analysis Windows and Cross-Paradigm Comparability
 
 The onset of measurable competition depends on the paradigm (eye-tracking
-analyses conventionally begin ~200 ms after word onset; mouse-tracking
-includes motor planning and execution time; ERP components are scored in
-component-specific windows). Because phonActivR works on *normalized* time
-(percent of the analysis window the researcher chose), the best-fitting
-delta is defined relative to that window. Three practical rules follow:
+analyses conventionally begin about 200 ms after word onset; mouse-tracking
+includes motor planning and execution time). Estimating a response latency
+absorbs a constant offset, but delta and `seg_steps` are still expressed in
+the normalized time of the chosen window, and in time-normalized data a
+step is a fixed fraction of each trial's response time. Three practical
+rules follow:
 
-1. **Within a paradigm**, best-fitting delta values are directly comparable
-   across groups when trial durations and analysis windows are comparable.
-2. **Across paradigms**, do not compare raw delta values. Instead compare
-   each group's delta *against its own delta = 0 baseline* — that is,
-   whether a prosodic constraint is present and how strong it is relative
-   to the family of curves for that paradigm.
-3. **Always report** the analysis window, and check robustness with
-   `goodness_of_fit(..., time_window = ...)`.
+1. **Within a paradigm**, delta values are comparable across groups when
+   response times and analysis windows are comparable.
+2. **Across paradigms**, do not compare raw delta values. Compare each
+   group's delta *against its own delta = 0 baseline*.
+3. **Always report** the analysis window, the latency search range, the
+   delta grid, the gate mode, and `seg_steps`, and show that conclusions
+   survive reasonable changes.
 
-## Step 5: Export Results
+## Step 7: Export Results
 
 ```{r export, eval=FALSE}
-export_results(sim, prefix = "moraic_sim", dir = "output/")
+export_results(sim, prefix = "lin2023_sim", dir = "output/")
 ```
 
-## Using Your Own Data (The Researcher's End Goal)
+The parameter file records every setting needed to re-run the simulation,
+including `seg_steps`, `residual_input`, `gate`, and the package version.
 
-Replace the synthetic data with your actual GAMM smooth estimates. The
-bundled `example_gamm` dataset has **exactly** the structure of a typical
-GAMM export (time, CV_effect, C_effect, CV_se, C_se, group), so the code
-below is fully runnable as-is; to use your own data, replace
-`data(example_gamm)` with `gamm_data <- read.csv("your_smooths.csv")` and
-keep everything else unchanged.
+## From Raw Data to the Fitting Format
 
-```{r own_data, fig.width=12, fig.height=6.5}
-# Bundled GAMM-format dataset (JP group generated at delta = 15,
-# EN group at delta = 0 — see ?example_gamm)
-data(example_gamm)
-head(example_gamm)
+The fitting functions need a data.frame with `time` (integer normalized
+steps 1..101), `cv_effect` and `c_effect` (for `fit_components()`) and/or
+`asymmetry` (for `goodness_of_fit()`), plus an optional `group`. Data on
+another time base, such as a visual-world window in milliseconds sampled at
+500 Hz, are first resampled to 101 equally spaced steps; report the window's
+start and length with the fit, because delta and `seg_steps` are then
+fractions of that window:
 
-# Convert the two component effects into the overlay format
-emp_real <- data.frame(
-  time      = example_gamm$time,
-  asymmetry = example_gamm$CV_effect - example_gamm$C_effect,
-  se        = sqrt(example_gamm$CV_se^2 + example_gamm$C_se^2),
-  group     = example_gamm$group
-)
+The tutorial article prints this conversion for bin-level data in
+milliseconds (Step 6a). The chunk below runs it end to end. Because the
+package ships no eye-tracking data, it first builds a small **simulated**
+bin-level data frame with the layout that visual-world analyses usually
+produce: one row per participant, condition, and 20-ms bin, with the
+proportion of looks to the target. The values are random draws from an
+invented pattern and carry no empirical information; only the code path
+matters here.
 
-overlay_empirical(sim, emp_real,
-  group_colors = c("JP bilinguals" = "black",
-                   "EN monolinguals" = "grey50"))
+```{r resample}
+library(dplyr)
+# Simulated bin-level data (NOT real data): 20 participants, four conditions,
+# 20-ms bins from 200 to 1,200 ms after word onset
+set.seed(1)
+bins <- seq(200, 1200, by = 20)
+looks <- function(t, dip) plogis((t - 650) / 90) * 0.8 - dip * exp(-((t - 750) / 120)^2)
+raw <- expand.grid(subject = 1:20, time_ms = bins,
+                   condition = c("cv_comp", "cv_ctrl", "c_comp", "c_ctrl"),
+                   stringsAsFactors = FALSE)
+raw$fixation <- with(raw, looks(time_ms, ifelse(condition == "cv_comp", 0.12,
+                                       ifelse(condition == "c_comp", 0.05, 0))) +
+                          rnorm(nrow(raw), 0, 0.05))
 
-# Formal selection: JP group -> delta = 10 (nearest grid value to the
-# generating delta = 15); EN group -> delta = 0 (its generating value)
-goodness_of_fit(sim, emp_real)
+# Step 6a conversion: control minus competitor (looks to the target are
+# lower when a competitor attracts attention), then 101 steps with approx()
+curves <- raw %>%
+  group_by(time_ms) %>%
+  summarise(cv_effect = mean(fixation[condition == "cv_ctrl"]) -
+                        mean(fixation[condition == "cv_comp"]),
+            c_effect  = mean(fixation[condition == "c_ctrl"]) -
+                        mean(fixation[condition == "c_comp"]),
+            .groups = "drop")
+emp <- data.frame(time      = 1:101,
+                  cv_effect = approx(curves$time_ms, curves$cv_effect, n = 101)$y,
+                  c_effect  = approx(curves$time_ms, curves$c_effect,  n = 101)$y)
+emp$asymmetry <- emp$cv_effect - emp$c_effect
+
+# The window is 1,000 ms, so one step is 10 ms and a 100-ms segment is
+# seg_steps = 10; the latency absorbs the delay between word onset and the
+# eye movements that the window does not already remove.
+sim_eye <- run_simulation(stim, delta_values = seq(0, 30, 5),
+                          seg_steps = 10, verbose = FALSE)
+fit_eye <- suppressWarnings(fit_components(sim_eye, emp, lag = 0:50,
+                                           verbose = FALSE))
+fit_eye[, c("delta", "lag", "r2", "r2_cv", "r2_c")]
 ```
 
-## From Raw Data to the Overlay Format (GAMM users)
+With real data, the competition effect is computed from the looks the
+design allows: competitor minus control looks when the display contains a
+control object, or, as here, target looks in a control condition minus
+target looks in a competitor condition. The selected delta on simulated
+curves like these means nothing; on real data, the checks of Step 5 apply.
 
-`overlay_empirical()` needs only a four-column data.frame: `time`
-(normalized bins), `asymmetry` (the empirical CV--C difference), `se`
-(optional), and `group` (optional). If you analyze your time-course data
-with GAMMs, the difference smooth maps onto this directly (schematic;
-adapt object names to your pipeline):
+GAMM difference smooths map onto the format directly (schematic; adapt
+object names to your pipeline):
 
 ```{r gamm_stub, eval=FALSE}
-# After fitting a GAMM to your mouse-tracking / eye-tracking data
-# (e.g., with mgcv::bam), extract the CV-vs-C difference smooth per
-# group with your usual tooling (e.g., itsadug::get_difference), then:
 emp <- data.frame(
-  time      = diff_smooth$time_bin,   # 1..101 normalized bins
-  asymmetry = diff_smooth$difference, # estimated CV - C effect
-  se        = diff_smooth$se,         # its standard error
-  group     = diff_smooth$group      # e.g., "JP bilinguals"
+  time      = cv_smooth$time_bin,    # 1..101 normalized bins
+  cv_effect = cv_smooth$difference,  # CV control minus CV competitor
+  c_effect  = c_smooth$difference,   # C control minus C competitor
+  group     = cv_smooth$group
 )
-overlay_empirical(sim, emp)
+emp$asymmetry <- emp$cv_effect - emp$c_effect
+fit_components(sim, emp)
 ```
-
-The bundled generation script `data-raw/make_example_gamm.R` documents
-the exact format contract with runnable code.
-
-A platform note: when saving figures with base `pdf()` on systems
-without UTF-8 locales, the delta glyph in legends can trigger font
-warnings; use `ggsave(..., device = cairo_pdf)` or PNG output.
 
 ## Cross-Linguistic Stimuli: Custom Phoneme Similarities
 
-The built-in feature matrix covers 24 English consonants and 15 vowels.
-Phonemes outside this set would silently receive a flat default similarity
-(0.3) with every other phoneme — `run_simulation()` now warns when this
-would happen. For such stimuli, directly enter pairwise similarity values
-(0–1) with `custom_similarity()`; no full feature matrix is needed:
+The built-in feature matrix covers 24 English consonants and 15 vowels, and
+some of its phonemes share a feature vector (see `?trace_features`).
+Phonemes outside this set, and pairs it does not distinguish, need pairwise
+similarity values (0–1) from `custom_similarity()`; `run_simulation()`
+warns about every uncovered phoneme and compared pair:
 
 ```{r custom_sim}
-# Example: Korean tense stops, not in the built-in English set
-my_pairs <- data.frame(
-  p1         = c("k*", "k*", "t*"),
-  p2         = c("k",  "g",  "t"),
-  similarity = c(0.85, 0.60, 0.85)
-)
-sim_mat <- custom_similarity(my_pairs)
-phoneme_similarity("k*", "k", similarity_matrix = sim_mat)
+onsets_ko <- list(
+  "kkada" = c("k*", "aa"),  # target
+  "kkaji" = c("k*", "aa"),  # CV competitor
+  "ttada" = c("t*", "aa"),  # CV control
+  "kkul"  = c("k*"),        # C competitor
+  "ttul"  = c("t*"))        # C control
+stim_ko <- create_stimuli(
+  targets = "kkada", large_comp = "kkaji", large_ctrl = "ttada",
+  small_comp = "kkul", small_ctrl = "ttul", onsets = onsets_ko,
+  large_type = "CV", small_type = "C")
+ko_sim <- custom_similarity(data.frame(p1 = c("k*", "k*"),
+                                       p2 = c("k*", "t*"),
+                                       similarity = c(1.00, 0.70)))
+check_phoneme_coverage(stim_ko, similarity_matrix = ko_sim)
+sim_ko <- run_simulation(stim_ko, similarity_matrix = ko_sim, verbose = FALSE)
+```
 
-# Pass the same matrix to the full pipeline:
-# run_simulation(stim, similarity_matrix = sim_mat)
+## A Second Dataset: The Same Bilinguals Listening to Mandarin
+
+`lin2023_chinese` holds the Mandarin-listening data of the same study
+(Experiment 1), with its 24-item stimulus set `example_stimuli_zh()`. Its
+Pinyin-based phoneme codes are outside the English feature matrix, so a
+similarity table is supplied (`mandarin_similarity()`, an illustrative rule).
+Here consonant-only competition is almost absent, and both gate readings put
+delta at one segment or more:
+
+```{r mandarin}
+stim_zh <- example_stimuli_zh()
+sm_zh <- mandarin_similarity()
+for (g in c("delay", "truncate")) {
+  s <- run_simulation(stim_zh, delta_values = seq(0, 30, 5), gate = g,
+                      similarity_matrix = sm_zh, verbose = FALSE)
+  print(attr(fit_components(s, lin2023_chinese, verbose = FALSE), "best_delta"))
+}
 ```
 
 ## Parameter Sensitivity
 
-```{r sensitivity, fig.width=12, fig.height=5}
-gammas <- c(0.02, 0.04, 0.06)
-sims <- lapply(gammas, function(g) {
-  run_simulation(stim, gamma = g, verbose = FALSE)
-})
+`sensitivity_analysis()` asks, for each combination of activation
+parameters and segment durations, whether every delta value yields a curve
+distinguishable from delta = 0 and from its neighbor in the grid.
 
-# Compare: asymmetry gradient shape is robust to gamma
-library(patchwork)
-plots <- lapply(seq_along(gammas), function(i) {
-  plot_asymmetry(sims[[i]],
-    title = paste0("gamma = ", gammas[i]))
-})
-plots[[1]] + plots[[2]] + plots[[3]]
+```{r sensitivity}
+sens <- sensitivity_analysis(stim,
+  alpha_values = c(0.04, 0.08), gamma_values = c(0.04, 0.06),
+  decay_values = 0.02, seg_values = 10, verbose = FALSE)
+sens
 ```
 
-## Power Guidance and Study Planning
+## Screening a Study Design
 
-Before collecting data, use `power_guidance()` to assess whether your design
-is capable of discriminating between competing delta hypotheses. The
-`max_asymmetry` column in `summary(sim)` provides the expected peak effect
-size at each delta value — use these to inform power calculations.
+`power_guidance()` compares the largest momentary difference between two
+adjacent asymmetry curves, converted to data units with a model-to-data
+`scale` (from a fit to pilot or published data), with an assumed
+between-participant SD in the same units, and rates the expected
+two-group test statistic. It is a screening heuristic, not a power
+analysis.
 
-```{r power, eval=FALSE}
-# How separable are delta = 0 (universalist) and delta = 30 (strong constraint)?
-power_guidance(sim, n_items = 42, n_participants = 24)
+```{r power}
+power_guidance(sim, n_participants = 41, empirical_sd = 0.156,
+               scale = 0.40)
 ```
 
-**Interpretation (four-level failure framework; Magnuson, Mirman, & Harris, 2012; You & Magnuson, 2018):**
+Here the SD (0.156) is the between-participant SD of the bilinguals'
+asymmetry at its peak in the shipped participant-level curves, and the
+scale (0.40) is that of the joint component fit. The heuristic compares two
+independent groups of `n_participants`; `n_items` is reported but does not
+enter the computation. Where participant-level pilot data exist, the
+bootstrap template in `lin2023_validation/validation.R` is the better
+screening tool.
 
-A failure to find the expected delta difference in your empirical data can
-arise at four levels:
-
-1. **Theory level** — the language-specific grain-size hypothesis is wrong
-2. **Implementation level** — phonActivR's equations misrepresent the theory
-3. **Parameter level** — the default alpha/gamma/decay do not apply to your population
-4. **Linking-hypothesis level** — your paradigm does not map cleanly onto the competition-effect quantity
-
-Run the sensitivity analysis (see Parameter Sensitivity section above) to probe
-levels 3 and 4 before interpreting a null result as evidence against level 1.
+**Interpretation (four-level failure framework; Magnuson, Mirman, & Harris,
+2012; You & Magnuson, 2018).** A failure to find the expected delta
+difference can arise at the theory level, the implementation level, the
+parameter level, or the linking-hypothesis level. Run the sensitivity and
+component checks before interpreting a null result as evidence against the
+theory.
 
 ## Pre-Registration Workflow
 
-Generating delta prediction curves *before* data collection is a form of
-**quantitative pre-registration** of effect structure. Unlike a conventional
-directional pre-registration ("we predict a CV advantage"), this specifies
-the *temporal shape* of the expected competition asymmetry at a particular
-delta value. Steps:
+Generating delta prediction curves *before* data collection specifies the
+temporal shape of the expected competition, not only its direction:
 
-1. Run `run_simulation()` on your planned stimulus set
-2. Use `power_guidance()` to confirm your design can discriminate the target delta values
-3. Register the `sim` object (or the exported CSV from `export_results()`) on OSF before data collection
-4. After data collection, overlay with `overlay_empirical()` and report the best-fitting delta value
+1. Run `run_simulation()` on your planned stimulus set, for the gate
+   mode(s) your hypothesis implies.
+2. Use `power_guidance()` and `sensitivity_analysis()` to confirm that the
+   planned design and delta grid can separate the hypotheses.
+3. Register the exported curves (`export_results()`) before data
+   collection.
+4. After data collection, fit with `fit_components()`, compare with
+   `shape_baseline()`, and report the robustness checks above.

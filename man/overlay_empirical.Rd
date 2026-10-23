@@ -10,7 +10,11 @@ overlay_empirical(
   group_colors = NULL,
   delta_colors = NULL,
   title = NULL,
-  fit = TRUE
+  fit = TRUE,
+  time_window = NULL,
+  lag = 0:50,
+  show_pre_onset = FALSE,
+  facet_groups = FALSE
 )
 }
 \arguments{
@@ -34,21 +38,52 @@ the first group and grey for the second.}
 \item{title}{Character. Optional title. If \code{NULL} (the default) no
 title is drawn inside the image; figure titles belong in the caption.}
 
-\item{fit}{Logical. If \code{TRUE} (the default), the best-fitting delta
-for each empirical group is estimated formally via
-\code{\link{goodness_of_fit}} (RSS/AIC model comparison); the result is
-printed to the console and the full AIC table is attached to the
-returned plot as the \code{"fit"} attribute (no text is drawn inside
-the image). This replaces visual curve-matching with a quantitative
-selection rule. Set \code{FALSE} to skip.}
+\item{fit}{Logical. If \code{TRUE} (the default), the selected delta
+for each group is printed to the console and the full
+\code{\link{goodness_of_fit}} table is attached to the returned plot as
+the \code{"fit"} attribute (no text is drawn inside the image). The
+scaling is the same whether or not \code{fit} is \code{TRUE}.}
+
+\item{time_window}{Optional length-2 numeric vector passed to
+\code{\link{goodness_of_fit}}; the scale factor (and the reported
+selection) is then estimated on that window only.}
+
+\item{lag}{Candidate response latencies passed to
+\code{\link{goodness_of_fit}} (default \code{0:50}). When a latency is estimated,
+each group's empirical curve is drawn shifted left by its fitted lag, so
+its time axis is aligned with the model's (word onset = time 1).}
+
+\item{show_pre_onset}{Logical. If \code{FALSE} (the default), empirical
+points that the latency shift moves before the model's time 1 are not
+drawn, because the model makes no prediction there. If \code{TRUE}, they
+are drawn, the x-axis is extended to negative model time, and a dotted
+line marks the model's time 1, so any empirical effect that precedes the
+model's onset stays visible.}
+
+\item{facet_groups}{Logical. If \code{FALSE} (the default), all groups are
+drawn in one panel. If \code{TRUE} and \code{empirical_data} has more
+than one group, one panel is drawn per group (each group aligned to its
+own selected delta curve) and the panels are combined side by side with
+patchwork and tagged A, B, ...; this is the layout of Figure 6A-B in the
+tutorial.}
 }
 \value{
-A ggplot2 object. When \code{fit = TRUE}, the object carries a
-  \code{"fit"} attribute (the \code{\link{goodness_of_fit}} table, whose
-  own \code{"best_delta"} attribute gives the selected delta per group).
+A ggplot2 object (or a patchwork object when
+  \code{facet_groups = TRUE} with several groups). When \code{fit = TRUE},
+  the object carries a \code{"fit"} attribute (the
+  \code{\link{goodness_of_fit}} table, whose own \code{"best_delta"}
+  attribute gives the selected delta per group).
 }
 \description{
 Adds empirical time-course data (e.g., from GAMM difference smooths)
 to an asymmetry gradient plot, enabling visual comparison between
 model predictions and observed behavior.
+}
+\details{
+Each group is drawn exactly as \code{\link{goodness_of_fit}} fitted it:
+in model units (the data divided by the least-squares scale of the delta
+model selected for that group) and, when a response latency is estimated,
+shifted by that group's fitted lag. The selected curve is therefore the
+one the data are fitted to, and visual inspection and formal selection
+use the same scaling.
 }

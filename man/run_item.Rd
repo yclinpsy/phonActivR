@@ -16,6 +16,11 @@ run_item(
   ctrl_scaling = 0.15,
   features = trace_features(),
   similarity_matrix = NULL,
+  seg_steps = 10,
+  residual_input = 0,
+  gate = c("delay", "truncate"),
+  c_weight = 0.5,
+  small_ctrl_type = NULL,
   ...
 )
 }
@@ -46,6 +51,41 @@ approximate baseline neighbourhood activation (default: 0.15).}
 \item{similarity_matrix}{Optional custom similarity matrix
 (from \code{\link{custom_similarity}}); takes precedence over
 \code{features} for pairs it covers.}
+
+\item{seg_steps}{Numeric. Normalized time steps per phonological segment
+(default: 10). Each competitor receives input for as long as the segments
+it shares with the target take to unfold: \code{shared_segments(type)
+* seg_steps} steps (C = 1 segment, CV = 2, CVC = 3, syllable = the
+number of transcribed segments), starting at its gate-open time (1 for
+the larger grain, \code{1 + delta} for the smaller grain). After that
+the target has diverged from the competitor and its input stops. Use
+\code{Inf} for the 0.2.x behavior (input never ends).}
+
+\item{residual_input}{Numeric in [0, 1] (default 0). Fraction of each
+competitor's input that continues for one more segment
+(\code{seg_steps} steps) after its shared segments end; see
+\code{\link{run_activation}}. Applied identically to both grain sizes.}
+
+\item{gate}{Character. How the prosodic gate treats the smaller-grain
+competitor. \code{"delay"} (default) is a buffered delay: the
+sub-prosodic evidence is held until \code{1 + delta} and then supports
+the competitor for its full shared-segment duration, so the
+disambiguation point moves with delta (delayed C competition).
+\code{"truncate"} is signal-locked: the gate opens at \code{1 + delta}
+but the disambiguation point stays where the signal puts it
+(\code{1 + shared_segments * seg_steps}), so the competitor receives
+input only for the part of its shared segment that is still unfolding
+after the gate opens; a delta of at least one segment removes its
+support entirely (attenuated or abolished C competition). The control's
+input window follows the competitor's disambiguation point in both
+modes.}
+
+\item{c_weight}{Numeric in (0, 1]. Weight of a C match relative to a full
+consonant match in \code{\link{compute_overlap}} (default 0.5).}
+
+\item{small_ctrl_type}{\code{NULL} (default: \code{small_type}) or the
+overlap type used to score the smaller-grain competitor's control; see
+\code{\link{run_simulation}}.}
 
 \item{...}{Additional arguments passed to \code{\link{run_activation}}.}
 }

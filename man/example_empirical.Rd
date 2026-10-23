@@ -10,7 +10,8 @@ example_empirical(
   noise_sd = NULL,
   group_labels = c("L2 bilinguals", "L1 monolinguals"),
   paradigm = c("mouse-tracking", "eye-tracking", "erp"),
-  seed = 42L
+  seed = 42L,
+  generate_with = list()
 )
 }
 \arguments{
@@ -36,13 +37,26 @@ and control groups (default: \code{c("L2 bilinguals", "L1 monolinguals")}).}
 \code{noise_sd} (see above) and is recorded in the returned data frame's
 \code{paradigm} column, so that synthetic datasets are self-documenting.}
 
-\item{seed}{Integer. Random seed for reproducibility (default: 42).}
+\item{seed}{Integer. Random seed for the noise (default: 42). It is
+applied locally, so the global random-number stream is not changed.}
+
+\item{generate_with}{Named list of \code{run_simulation()} settings that
+override those stored in \code{sim} when generating the data (e.g.,
+\code{list(residual_input = 1)} or \code{list(seg_steps = 14)}), to
+create data from a model that differs from the one being fitted
+(a misspecification check). Default: none.}
 }
 \value{
 A data.frame with columns:
   \describe{
     \item{time}{Integer. Normalized time step (1 to time_steps)}
     \item{asymmetry}{Numeric. Larger-grain minus smaller-grain effect}
+    \item{cv_effect, c_effect}{Numeric. The larger- and smaller-grain
+      competition effects (\code{asymmetry = cv_effect - c_effect}), for
+      use with \code{\link{fit_components}}. Noise with SD
+      \code{noise_sd} (before smoothing) is added to the asymmetry and to
+      the CV curve, and the C curve is their difference, so its noise SD is
+      about \code{sqrt(2) * noise_sd} and correlated with the CV noise}
     \item{se}{Numeric. Standard error estimate}
     \item{group}{Character. Group label}
     \item{paradigm}{Character. The paradigm label supplied}
@@ -54,17 +68,21 @@ A data.frame with columns:
 Creates a synthetic empirical dataset that mimics the structure of GAMM
 smooth output from a time-course experiment (mouse-tracking or eye-tracking).
 }
-\section{Primary Demo Path}{
+\section{How the data are generated}{
 
-\code{example_empirical()} is the \strong{recommended starting point} for
-learning the overlay workflow. It generates realistic synthetic curves that
-run identically to real empirical data, allowing the complete pipeline to
-be demonstrated without external dependencies. This is not a fallback
-"Option A": it is the intended primary demo. Once the workflow is understood,
-researchers substitute their own \code{data.frame} (containing \code{time},
-\code{asymmetry}, and optionally \code{se} and \code{group}) with no other
-changes to the call. See the "Using Your Own Data" section in
-\code{vignette("phonActivR-tutorial")}.
+The experimental group's curve is produced by running the model itself at
+\code{true_delta} (with the stimuli and parameters stored in \code{sim});
+it is \emph{not} interpolated between the simulated grid curves, so an
+off-grid value such as \code{true_delta = 15} yields the curve the model
+actually predicts at delta = 15. The control group's curve is the
+delta = 0 prediction. Temporally correlated Gaussian noise (a 5-bin moving
+average) is then added to both. Because these data come from the model,
+they are suitable for learning the workflow and for parameter-recovery
+checks, but they are not evidence that the model fits real behavior.
+Researchers substitute their own \code{data.frame} (containing
+\code{time}, \code{asymmetry}, and optionally \code{se} and
+\code{group}) with no other change to the call; see the section "From Raw
+Data to the Fitting Format" in \code{vignette("phonActivR-tutorial")}.
 }
 
 \section{Competing-Hypothesis Connection}{

@@ -8,6 +8,9 @@ run_activation(
   overlap_comp,
   overlap_ctrl,
   overlap_onset = 1,
+  overlap_offset = Inf,
+  residual_input = 0,
+  residual_steps = 0,
   time_steps = 101L,
   alpha = 0.08,
   gamma = 0.04,
@@ -26,6 +29,24 @@ the target, in [0, 1].}
 \item{overlap_onset}{Integer. Time step at which competitor phonological
 features become available. Set to 1 for mora-aligned units (CV competitors)
 or \code{1 + delta} for sub-moraic units under a prosodic constraint.}
+
+\item{overlap_offset}{Numeric. Time step at which the competitor's (and the
+control's) bottom-up input ends because the unfolding target has
+diverged from it (the disambiguation point). Input is present for
+\code{overlap_onset <= t < overlap_offset}. After this point the
+competitor receives no further support and its activation falls under
+decay and lateral inhibition from the target, so competition resolves.
+\code{Inf} (the default here) keeps the input on for the whole trial,
+which reproduces the phonActivR 0.2.x dynamics.}
+
+\item{residual_input}{Numeric in [0, 1]. Fraction of the competitor's (and
+the control's) input that continues for \code{residual_steps} steps after
+\code{overlap_offset} (default 0: input stops at the disambiguation
+point). A value of 1 means listeners reject a competitor only one
+segment after its first mismatching segment begins.}
+
+\item{residual_steps}{Numeric. Duration of the residual input, in time
+steps (default 0).}
 
 \item{time_steps}{Integer. Total number of normalized time steps (default: 101).}
 

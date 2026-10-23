@@ -1,9 +1,9 @@
 Package: phonActivR
 Type: Package
-Title: Simulating and Testing Prosodic-Constraint (Delta) Hypotheses in
-    Cross-Linguistic Spoken Word Recognition
-Version: 0.2.0
-Date: 2026-09-26
+Title: Simulating and Fitting Prosodic Constraints on Lexical Competition
+    in Spoken Word Recognition
+Version: 0.3.0
+Date: 2026-09-30
 Authors@R: c(
     person("Yu-Cheng", "Lin", email = "yucheng.lin@utrgv.edu", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0002-5905-6928")),
@@ -12,24 +12,27 @@ Authors@R: c(
   )
 Description: A pure-R implementation of a compact, bounded lateral-inhibition
     competition model in the interactive-activation family (cf. McClelland &
-    Rumelhart, 1981) for generating qualitative predictions about phonological
-    competition in spoken word recognition. It is not the TRACE model: it omits
-    TRACE's feature and word levels, time-slice reduplication, time-varying input,
-    and top-down feedback, and its parameter defaults are its own. Introduces the
-    delta parameter, which operationalizes cross-linguistic prosodic processing
-    constraints (e.g., moraic,
-    syllabic) as temporal delays on sub-unit
-    activation; delta shifts simulated competition monotonically but its leverage
-    is modest relative to competitor-overlap structure. Supports item-level
-    simulation across full experimental stimulus sets with automatic phonological
-    overlap computation from a binary adaptation, constructed by the package
-    authors, of the seven McClelland-Elman (1986) feature dimensions (the
-    original TRACE II specification is an eight-level continuum over 15
-    phonemes), used here as a similarity metric only. Includes paradigm-agnostic empirical overlay functions
-    for normalizing and superimposing model predictions onto time-course data from
-    mouse-tracking, eye-tracking, ERP, or any paradigm producing a time-varying
-    competition measure. Designed for cross-linguistic and bilingual spoken word
-    recognition research.
+    Rumelhart, 1981) for generating predictions about phonological competition
+    in spoken word recognition. It is not the TRACE model: it omits TRACE's
+    feature and phoneme unit levels, its lexicon, time-slice reduplication,
+    and top-down feedback, and its parameter defaults are its own. Each competitor receives bottom-up
+    input only while the segments it shares with the target unfold, so
+    competition rises and then resolves at the disambiguation point.
+    Introduces the delta parameter, which operationalizes cross-linguistic
+    prosodic processing constraints (e.g., moraic, syllabic) as a gate on
+    sub-prosodic competitor input that either delays that input (buffered
+    delay) or removes the part of it that arrives before the gate opens
+    (signal-locked truncation). Supports item-level simulation
+    across full experimental stimulus sets with automatic phonological overlap
+    computation from a binary adaptation, constructed by the package authors,
+    of the seven McClelland-Elman (1986) feature dimensions, used here as a
+    similarity metric only, or from user-supplied similarities. Includes
+    model-comparison tools that fit simulated curves to time-course data from
+    mouse-tracking, eye-tracking, ERP, or any paradigm producing a
+    time-varying competition measure (least-squares scaling and an estimated
+    response latency; joint fits of both competition components; a
+    single-bump reference), and ships real mouse-tracking data from Lin, Lin, and
+    Yeh (2023) for the bundled English and Mandarin stimulus sets.
 License: MIT + file LICENSE
 Encoding: UTF-8
 LazyData: true
@@ -42,7 +45,8 @@ Imports:
     cli (>= 3.6.0),
     rlang (>= 1.1.0),
     stats,
-    utils
+    utils,
+    withr (>= 2.5.0)
 Suggests:
     testthat (>= 3.0.0),
     knitr,

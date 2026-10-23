@@ -2,20 +2,31 @@
 % Please edit documentation in R/data.R
 \name{example_stimuli_jp}
 \alias{example_stimuli_jp}
-\title{Example Japanese-English Bilingual Stimulus Set (42 Items)}
+\alias{example_stimuli}
+\title{Built-in 42-Item English Stimulus Set (Lin et al., 2023)}
 \usage{
 example_stimuli_jp()
+
+example_stimuli()
 }
 \value{
 A \code{"phonActivR_stimuli"} object ready for
   \code{\link{run_simulation}}.
 }
 \description{
-A complete stimulus set for testing moraic processing constraints in
-Japanese-English bilingual spoken word recognition. Contains 42 target
-words, each paired with a CV competitor (sharing onset consonant + vowel
-with the target), a C competitor (sharing only the onset consonant),
-and matched phonologically unrelated controls for each.
+The English stimulus set of Lin, Lin, and Yeh (2023, Experiments 3 and
+4). Contains 42 target words, each paired with a CV competitor (sharing
+onset consonant + vowel with the target), a C competitor (sharing only
+the onset consonant), and a matched control for each competitor (a CV
+control shares the target's vowel but not its onset; a C control shares
+none of the target's initial segments). The CV/C contrast makes the set usable for any prosodic-constraint
+hypothesis in which the initial CV is the complete unit (e.g., the mora
+for Japanese listeners, the syllable body for Mandarin listeners).
+\code{example_stimuli()} and \code{example_stimuli_jp()} are identical;
+the second name is kept for backward compatibility (it reflects the
+Japanese application for which the function was first written). Real
+mouse-tracking data for these items are bundled as
+\code{\link{lin2023_english}}.
 }
 \details{
 The stimulus materials are from Lin et al. (2023, Experiments 3 and 4),
@@ -30,7 +41,7 @@ Onset transcriptions follow the CMU Pronouncing Dictionary / TRACE
 notation.
 }
 \examples{
-stim <- example_stimuli_jp()
+stim <- example_stimuli()
 sim <- run_simulation(stim)
 summary(sim)
 }

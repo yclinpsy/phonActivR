@@ -4,11 +4,13 @@
 \alias{cohort_rhyme_benchmark}
 \title{Cohort and Rhyme Benchmark (Qualitative Interactive-Activation Checks)}
 \usage{
-cohort_rhyme_benchmark(delta_logic_value = 50L, verbose = TRUE)
+cohort_rhyme_benchmark(delta_logic_value = 50L, seg_steps = 10, verbose = TRUE)
 }
 \arguments{
 \item{delta_logic_value}{Integer. A high delta value to test gating
 behaviour (default: 50).}
+
+\item{seg_steps}{Numeric. Time steps per segment (default 10).}
 
 \item{verbose}{Logical. Print results (default: TRUE).}
 }
@@ -43,6 +45,22 @@ the target ends the trial with higher activation than any competitor.
 Also verifies the delta gating logic: at very high delta, sub-prosodic
 competitor activation should be exactly zero until the gating period ends.
 }
+\section{Input timing}{
+
+The benchmark uses the target \emph{beaker} (/b iy k er/, four segments).
+Each word receives bottom-up input only while the target segments it
+matches are unfolding, with \code{seg_steps} time steps per segment: the
+cohort competitor \emph{beetle} matches segments 1--2, the rhyme
+competitor \emph{speaker} matches segments 2--4 (partial overlap, because
+its onset mismatches), and the unrelated word matches none (weak overlap
+throughout the word). The later start of rhyme input therefore follows
+from where the shared segments sit in the word, as in TRACE; check (3)
+confirms that the dynamics turn this position-specific input into the
+expected later rhyme peak, not that the timing emerges from nothing. The
+overlap values (0.9, 0.5, 0.15; controls 0.1) are fixed illustrative
+inputs, not computed from transcriptions.
+}
+
 \examples{
 bench <- cohort_rhyme_benchmark()
 bench$all_pass

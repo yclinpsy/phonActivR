@@ -2,17 +2,17 @@ citHeader("To cite phonActivR in publications, please use:")
 
 bibentry(
   bibtype  = "Manual",
-  title    = "phonActivR: An R package for simulating and testing prosodic-constraint (delta) hypotheses in cross-linguistic spoken word recognition",
+  title    = "phonActivR: Simulating and fitting prosodic constraints on lexical competition in spoken word recognition",
   author   = c(person("Yu-Cheng", "Lin"),
                person("Hitomi", "Kambara")),
   year     = "2026",
-  note     = "R package version 0.2.0",
+  note     = "R package version 0.3.0",
   url      = "https://github.com/yclinpsy/phonActivR",
   textVersion = paste(
     "Lin, Y.-C., & Kambara, H. (2026).",
-    "phonActivR: An R package for simulating and testing",
-    "prosodic-constraint (delta) hypotheses in cross-linguistic spoken",
-    "word recognition (R package version 0.2.0).",
+    "phonActivR: Simulating and fitting prosodic constraints on",
+    "lexical competition in spoken word recognition",
+    "(R package version 0.3.0).",
     "https://github.com/yclinpsy/phonActivR"
   )
 )

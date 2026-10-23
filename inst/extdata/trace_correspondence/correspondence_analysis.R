@@ -1,7 +1,7 @@
 # =============================================================================
 # correspondence_analysis.R -- phonActivR vs. ORIGINAL C TRACE (p86, slex)
 # =============================================================================
-# Reproduces every number reported in the tutorial's Validation 6 from the
+# Reproduces every number reported in the tutorial's Validation 1 from the
 # two data files shipped in this folder. It does NOT require the C binary:
 # ctrace_trajectories.csv holds the original-TRACE word-activation
 # trajectories (produced by run_ctrace_batch.py; byte-reproducible from the
@@ -15,10 +15,12 @@
 # probabilities over the three probed words (fixed k = 7; Allopenna,
 # Magnuson, & Tanenhaus, 1998, introduced Luce linking for TRACE with a
 # time-growing k; results are insensitive: rho = .82 for k in 4..10 and
-# .85 on raw activations), competition effect = P(competitor) - P(control).
+# .84 on raw activations), competition effect = P(competitor) - P(control).
 # phonActivR side: the package's own competitor-type conventions
 # (cohort_rhyme_benchmark) with item-level overlaps computed from the
-# original TRACE feature similarities via custom_similarity().
+# original TRACE feature similarities via custom_similarity(), and
+# segment-timed input windows (cohort: target segments 1-2; rhyme:
+# segments 2..n; unrelated: whole word; SEG_STEPS steps per segment).
 # Onset rule (both models): first time point at which the competition
 # effect reaches 20% of its own peak (undefined when the peak is
 # negligible: < .005 TRACE / < .02 phonActivR).
@@ -30,6 +32,7 @@ smat  <- custom_similarity(read.csv("trace_feature_similarity.csv"))
 traj  <- read.csv("ctrace_trajectories.csv", stringsAsFactors = FALSE)
 
 K <- 7  # fixed Luce separation constant; see header note on robustness
+if (!exists("SEG_STEPS")) SEG_STEPS <- 10  # time steps per segment (package default)
 luce_eff <- function(it) {
   sapply(1:90, function(cy) {
     a <- c(t = it$act[it$role == "targ" & it$cycle == cy],
@@ -51,18 +54,24 @@ res <- do.call(rbind, lapply(seq_len(nrow(pairs)), function(k) {
   tp <- strsplit(pr$target, "")[[1]]
   cp <- strsplit(pr$comp,   "")[[1]]
   up <- strsplit(pr$ctrl,   "")[[1]]
-  if (pr$class == "cohort") {
+  # Segment-timed input windows (phonActivR >= 0.3.0; seg_steps per
+  # segment, as in cohort_rhyme_benchmark()): each competitor is supported
+  # only while the target segments it matches unfold.
+  seg <- SEG_STEPS
+  n_t <- length(tp)
+  if (pr$class == "cohort") {        # matches target segments 1-2
     ov_c <- compute_overlap(tp[1:2], cp[1:2], "CV", similarity_matrix = smat)
-    on_c <- 1L
-  } else if (pr$class == "rhyme") {
+    on_c <- 1; off_c <- 1 + 2 * seg
+  } else if (pr$class == "rhyme") {  # matches target segments 2..n
     ov_c <- compute_overlap(tp, cp, "syllable", similarity_matrix = smat)
-    on_c <- 30L
-  } else {
+    on_c <- 1 + seg; off_c <- 1 + n_t * seg
+  } else {                           # matches nothing; weak input throughout
     ov_c <- compute_overlap(tp, cp, "syllable", similarity_matrix = smat)
-    on_c <- 1L
+    on_c <- 1; off_c <- 1 + n_t * seg
   }
   ov_u  <- compute_overlap(tp, up, "syllable", similarity_matrix = smat)
   eff_p <- run_activation(ov_c, ov_u, overlap_onset = on_c,
+                          overlap_offset = off_c,
                           time_steps = 101L)$competition_effect
   eff_t <- luce_eff(traj[traj$item == pr$item, ])
   data.frame(class = pr$class, target = pr$target,
@@ -83,7 +92,7 @@ cat(sprintf("ONSET (n=%d, items with realized competition in both models): Pears
             sum(on_ok), onr$estimate, onr$p.value))
 write.csv(res, "correspondence_results.csv", row.names = FALSE)
 
-# --- Robustness of the Luce linking constant (reported in Validation 6) ---
+# --- Robustness of the Luce linking constant (reported in Validation 1) ---
 peak_for_k <- function(K2) sapply(seq_len(nrow(pairs)), function(k) {
   it <- traj[traj$item == pairs$item[k], ]
   max(sapply(1:90, function(cy) {
@@ -102,3 +111,16 @@ raw_peak <- sapply(seq_len(nrow(pairs)), function(k) {
     it$act[it$role=="ctrl" & it$cycle==cy])) })
 cat(sprintf("raw activations: Spearman rho = %.3f\n",
   suppressWarnings(cor(res$p_peak, raw_peak, method = "spearman"))))
+
+# --- Class structure (reported in Validation 1) -------------------------------
+# Many TRACE peaks are tied at zero, so report Kendall's tau-b as well, and
+# compare with a predictor that codes only the competitor class.
+kt <- suppressWarnings(cor.test(res$p_peak[ok], res$t_peak[ok], method = "kendall",
+                                exact = FALSE))
+cls <- c(cohort = 3, rhyme = 2, unrel = 1)[res$class]
+cat(sprintf("Kendall tau-b = %.3f | class code vs TRACE: Spearman rho = %.3f\n",
+            kt$estimate,
+            suppressWarnings(cor(cls, res$t_peak, method = "spearman"))))
+for (k in c("cohort", "rhyme")) cat(sprintf("within %s: Spearman rho = %.2f\n", k,
+  suppressWarnings(cor(res$p_peak[res$class == k], res$t_peak[res$class == k],
+                       method = "spearman"))))

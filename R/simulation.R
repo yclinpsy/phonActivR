@@ -64,9 +64,11 @@ create_stimuli <- function(targets, large_comp, large_ctrl,
   all_words <- unique(c(targets, large_comp, large_ctrl, small_comp, small_ctrl))
   missing <- setdiff(all_words, names(onsets))
   if (length(missing) > 0) {
-    cli::cli_alert_warning(
-      "Missing onset transcriptions for {length(missing)} word(s): {paste(missing, collapse = ', ')}. These will use default overlap = 0.3."
-    )
+    warning("Missing onset transcriptions for ", length(missing), " word(s): ",
+            paste(missing, collapse = ", "),
+            ". These receive the placeholder \"?\" (similarity 0.3 with every ",
+            "phoneme); add their transcriptions before simulating.",
+            call. = FALSE)
   } else {
     cli::cli_alert_success("All {length(all_words)} unique words across the {n} items verified: onset transcriptions complete.")
   }
@@ -119,11 +121,45 @@ create_stimuli <- function(targets, large_comp, large_ctrl,
 #'   in this matrix take precedence over the feature-based computation. This
 #'   is the recommended route for cross-linguistic stimulus sets containing
 #'   phonemes outside the built-in feature matrix.
+#' @param seg_steps Numeric. Normalized time steps per phonological segment
+#'   (default 10). Sets the disambiguation point of each competitor: it
+#'   receives input only while the segments it shares with the target unfold
+#'   (see \code{\link{run_item}}), so competition rises and then resolves.
+#'   The default assumes that one segment occupies about 10\% of a
+#'   normalized trial (a 3--4-segment word of roughly 400--500 ms within
+#'   trials of about 1.0--1.3 s); check the sensitivity of conclusions to
+#'   this value (e.g., 6--14). \code{Inf} reproduces the
+#'   0.2.x dynamics, in which competitor input never ends.
+#' @param residual_input Numeric in [0, 1] (default 0). Fraction of each
+#'   competitor's (and control's) input that continues for one more segment
+#'   after its shared segments end. 0 stops input at the disambiguation point;
+#'   1 means a competitor is rejected only one segment after its first
+#'   mismatching segment begins. In held-out-item tests on Lin et al. (2023),
+#'   a value of 1 improved the fit to the C competition for English
+#'   monolinguals; see the manuscript, Step 6b.
+#' @param c_weight Numeric in (0, 1]. Weight of a C (consonant-only) match
+#'   relative to a full consonant match (default 0.5): the C overlap is the
+#'   consonant similarity times \code{c_weight}; see
+#'   \code{\link{compute_overlap}}. It sets the strength of the C
+#'   competitor's input and should be varied as a robustness check.
+#' @param small_ctrl_type \code{NULL} (default) or an overlap type
+#'   (\code{"C"}, \code{"CV"}, \code{"CVC"}, \code{"syllable"}) used to
+#'   score the smaller-grain competitor's control. By default the control is
+#'   scored with \code{small_type}, so a C control's overlap is its onset
+#'   similarity times \code{c_weight}. Set \code{"CV"} when the C control
+#'   shares the target's vowel (as in the Mandarin set,
+#'   \code{\link{example_stimuli_zh}}), so that its vowel match enters its
+#'   input; a sensitivity check for such designs.
+#' @param gate Character, \code{"delay"} (default) or \code{"truncate"}.
+#'   How the prosodic gate treats the smaller-grain competitor: a buffered
+#'   delay (the whole support window moves with delta) or a signal-locked
+#'   truncation (only the part of the shared segment heard after the gate
+#'   opens supports the competitor). See \code{\link{run_item}}.
 #' @param verbose Logical. Print progress messages (default: TRUE).
-#' @param seed Integer or NULL. Random seed for reproducibility (default: NULL).
-#'   Set to an integer (e.g., \code{seed = 1234}) to produce identical results
-#'   across sessions. When \code{NULL}, each call may produce slightly different
-#'   onset timing values due to floating-point order.
+#' @param seed Ignored. The simulation is deterministic (identical input
+#'   always gives identical output), so no random seed is needed; the
+#'   argument is kept so that code written for earlier versions still runs,
+#'   and it does not change the global random-number stream.
 #'
 #' @return A list of class \code{"phonActivR_sim"} containing:
 #'   \describe{
@@ -152,10 +188,17 @@ run_simulation <- function(stimuli,
                            ctrl_scaling = 0.15,
                            features     = trace_features(),
                            similarity_matrix = NULL,
+                           seg_steps    = 10,
+                           residual_input = 0,
+                           gate         = c("delay", "truncate"),
+                           c_weight     = 0.5,
+                           small_ctrl_type = NULL,
                            verbose      = TRUE,
                            seed         = NULL) {
 
-  if (!is.null(seed)) set.seed(seed)
+  gate <- match.arg(gate)
+  # The model is deterministic; `seed` is accepted for backward
+  # compatibility only and does not touch the random-number stream.
 
   stopifnot(inherits(stimuli, "phonActivR_stimuli"))
 
@@ -185,6 +228,20 @@ run_simulation <- function(stimuli,
   item_results <- list()
   onset_data   <- list()
 
+  # Words without a transcription would silently receive the placeholder
+  # "?" (similarity 0.3 with everything); make this an R warning so that it
+  # cannot pass unnoticed in verbose = FALSE loops.
+  all_words <- unique(c(items$target, items$large_comp, items$large_ctrl,
+                        items$small_comp, items$small_ctrl))
+  no_transcr <- all_words[!all_words %in% names(onsets)]
+  if (length(no_transcr) > 0) {
+    warning(length(no_transcr), " word(s) have no transcription in 'onsets' ",
+            "and receive the placeholder \"?\" (e.g., ",
+            paste(utils::head(no_transcr, 5), collapse = ", "),
+            "). Add their transcriptions before interpreting the simulation.",
+            call. = FALSE)
+  }
+
   for (delta in delta_values) {
     large_matrix <- matrix(NA, nrow = n_items, ncol = time_steps)
     small_matrix <- matrix(NA, nrow = n_items, ncol = time_steps)
@@ -212,6 +269,11 @@ run_simulation <- function(stimuli,
         ctrl_scaling     = ctrl_scaling,
         features         = features,
         similarity_matrix = similarity_matrix,
+        seg_steps        = seg_steps,
+        residual_input   = residual_input,
+        gate             = gate,
+        c_weight         = c_weight,
+        small_ctrl_type  = small_ctrl_type,
         time_steps       = time_steps,
         alpha            = alpha,
         gamma            = gamma,
@@ -259,7 +321,7 @@ run_simulation <- function(stimuli,
 
     if (verbose) {
       cli::cli_alert_success(
-        "  delta={delta} | Large onset={ifelse(is.na(lg_on),'NA',lg_on)}% | Small onset={ifelse(is.na(sm_on),'NA',sm_on)}% | Delay={ifelse(is.na(lg_on)||is.na(sm_on),'NA',sm_on-lg_on)}%"
+        "  delta={delta} | Large onset: step {ifelse(is.na(lg_on),'NA',lg_on)} | Small onset: step {ifelse(is.na(sm_on),'NA',sm_on)} | Delay: {ifelse(is.na(lg_on)||is.na(sm_on),'NA',sm_on-lg_on)} steps"
       )
     }
   }
@@ -285,8 +347,7 @@ run_simulation <- function(stimuli,
     t_elapsed <- round(proc.time()[["elapsed"]] - t_start, 2)
     cli::cli_h1("Simulation Complete")
     cli::cli_alert_success(
-      "Completed {n_items} items x {length(delta_values)} delta values in {t_elapsed}s. ",
-      "To benchmark workflow efficiency vs. jTRACE batch scripting, see vignette('phonActivR-tutorial')."
+      "Completed {n_items} items x {length(delta_values)} delta values in {t_elapsed}s."
     )
   }
 
@@ -303,7 +364,14 @@ run_simulation <- function(stimuli,
         gamma        = gamma,
         decay        = decay,
         threshold    = threshold,
-        ctrl_scaling = ctrl_scaling
+        ctrl_scaling = ctrl_scaling,
+        features     = features,
+        similarity_matrix = similarity_matrix,
+        seg_steps    = seg_steps,
+        residual_input = residual_input,
+        gate         = gate,
+        c_weight     = c_weight,
+        small_ctrl_type = small_ctrl_type
       ),
       elapsed_sec  = round(proc.time()[["elapsed"]] - t_start, 2),
       summary      = summary_df
@@ -330,13 +398,11 @@ summary.phonActivR_sim <- function(object, ...) {
   print(object$summary, row.names = FALSE)
   # Power guidance: the max_asymmetry column gives the expected effect size
   # at each delta, which can be used to power studies to discriminate delta values.
-  cat("\nNote: 'max_asymmetry' is the expected peak competition asymmetry at each\n")
-  cat("delta value. Use these as effect-size inputs when planning sample sizes\n")
-  cat("(items and participants) to discriminate between competing delta hypotheses.\n")
-  cat("A difference in max_asymmetry >= 0.02 between delta values typically\n")
-  cat("requires ~30+ items and ~20+ participants per group for 80% power in\n")
-  cat("a GAMM-based time-course analysis. See vignette('phonActivR-tutorial')\n")
-  cat("for the sensitivity analysis workflow.\n\n")
+  cat("\nNote: 'max_asymmetry' is the model's peak competition asymmetry at each\n")
+  cat("delta value, in model activation units. Differences between delta values\n")
+  cat("show how strongly the hypotheses diverge; see power_guidance() for a\n")
+  cat("coarse screening heuristic (not a power analysis) and\n")
+  cat("vignette('phonActivR-tutorial') for the sensitivity-analysis workflow.\n\n")
   invisible(object$summary)
 }
 
@@ -380,3 +446,40 @@ summary.phonActivR_stimuli <- function(object, ...) {
   invisible(object$items)
 }
 
+
+
+# Internal: re-run the model with the settings stored in `sim` at a single
+# delta value (used to generate data at an off-grid delta without
+# interpolating between grid curves). `overrides` replaces stored settings
+# (e.g., list(residual_input = 1)) to generate data from a different model.
+# Returns the full result list (large_effect, small_effect, asymmetry, ...).
+.simulate_one <- function(sim, delta, overrides = list()) {
+  key <- as.character(delta)
+  if (length(overrides) == 0 && !is.null(sim$results[[key]])) {
+    return(sim$results[[key]])
+  }
+  p <- sim$params
+  get <- function(nm, default) {
+    if (!is.null(overrides[[nm]])) overrides[[nm]] else
+      if (!is.null(p[[nm]])) p[[nm]] else default
+  }
+  one <- run_simulation(sim$stimuli,
+                        delta_values = delta,
+                        time_steps   = get("time_steps", 101L),
+                        alpha        = get("alpha", 0.08),
+                        gamma        = get("gamma", 0.04),
+                        decay        = get("decay", 0.02),
+                        threshold    = get("threshold", 0.04),
+                        ctrl_scaling = get("ctrl_scaling", 0.15),
+                        features     = get("features", trace_features()),
+                        similarity_matrix = get("similarity_matrix", NULL),
+                        seg_steps    = get("seg_steps", 10),
+                        residual_input = get("residual_input", 0),
+                        gate         = get("gate", "delay"),
+                        c_weight     = get("c_weight", 0.5),
+                        verbose      = FALSE)
+  one$results[[key]]
+}
+.simulate_asymmetry <- function(sim, delta, overrides = list()) {
+  .simulate_one(sim, delta, overrides)$asymmetry
+}

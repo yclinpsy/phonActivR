@@ -2,7 +2,7 @@
 % Please edit documentation in R/validation.R
 \name{compare_languages}
 \alias{compare_languages}
-\title{Compare Grain-Size Profiles Across Two Language Groups}
+\title{Compare Two Simulations Side by Side}
 \usage{
 compare_languages(
   sim_a,
@@ -34,23 +34,31 @@ A list with components:
     \item{plot}{A patchwork ggplot2 object showing side-by-side asymmetry
       gradients; each panel carries its own delta legend when the two
       groups are simulated over different delta grids}
-    \item{comparison}{Data frame comparing peak asymmetry, onset delay,
-      and best-fitting delta for each group}
+    \item{comparison}{Data frame describing each simulated grid (not
+      listeners): peak asymmetry and the delta at which it occurs, the
+      largest C-onset delay, the gate mode, the peak C effect at the
+      largest delta, and the delta values at which no C competition
+      crosses the onset threshold. Fit each group's empirical data with
+      \code{\link{fit_components}} to obtain a best-fitting delta. The
+      function can also contrast two model variants (e.g.,
+      \code{gate = "delay"} versus \code{"truncate"}) on the same items.}
   }
 }
 \description{
-Takes two \code{"phonActivR_sim"} objects (e.g., one for Japanese-English
-bilinguals, one for Chinese-English bilinguals) and produces a side-by-side
-comparison of their predicted asymmetry gradients. This enables researchers
-to ask: do two L1 groups show the same or different prosodic constraint
-profiles?
+Takes two \code{"phonActivR_sim"} objects and produces a side-by-side
+comparison of their predicted asymmetry gradients. The two objects can be
+two stimulus sets (e.g., the English and Mandarin sets) or two model
+variants on the same items (e.g., the two gate modes). The comparison
+describes the simulated grids; conclusions about listeners come from
+fitting each group's data with \code{\link{fit_components}}.
 }
 \examples{
-stim <- example_stimuli_jp()
-sim_jp <- run_simulation(stim, delta_values = c(0, 10, 20, 30), verbose = FALSE)
-sim_zh <- run_simulation(stim, delta_values = c(0, 5, 10, 15, 20), verbose = FALSE)
-result <- compare_languages(sim_jp, sim_zh,
-  label_a = "Japanese-English", label_b = "Chinese-English")
+stim <- example_stimuli()
+sim_delay <- run_simulation(stim, delta_values = c(0, 10, 20, 30), verbose = FALSE)
+sim_trunc <- run_simulation(stim, delta_values = c(0, 10, 20, 30),
+                            gate = "truncate", verbose = FALSE)
+result <- compare_languages(sim_delay, sim_trunc,
+  label_a = "Buffered delay", label_b = "Signal-locked truncation")
 result$plot
 result$comparison
 }

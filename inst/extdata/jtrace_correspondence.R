@@ -3,7 +3,7 @@
 # =============================================================================
 # This script provides the phonActivR half of a quantitative correspondence
 # check between phonActivR competition onset timings and jTRACE simulation
-# outputs. The tutorial's Validation 6 reports a completed item-level
+# outputs. The tutorial's Validation 1 reports a completed item-level
 # correspondence study against the ORIGINAL C implementation of TRACE
 # (see inst/extdata/trace_correspondence/, which reproduces every number
 # in that section). This template covers the analogous check against
@@ -34,7 +34,7 @@ if (!requireNamespace("phonActivR", quietly = TRUE)) {
     pkgload::load_all(".", quiet = TRUE)
   } else {
     stop("phonActivR is not installed. Install it first:\n",
-         "  devtools::install_github('yclinpsy/phonActivR')")
+         "  devtools::install_github('yclinpsy/phonActivR@v0.3.0')")
   }
 } else {
   library(phonActivR)
@@ -85,7 +85,7 @@ cat("\nPer-item onsets extracted:",
 # cat(sprintf("CV correspondence: r = %.2f\n", cor_cv))
 # cat(sprintf("C  correspondence: r = %.2f\n", cor_c))
 
-cat("\nFor the full procedure, see the tutorial's Validation 6 and the\n")
+cat("\nFor the full procedure, see the tutorial's Validation 1 and the\n")
 cat("jtracer documentation: Garcia-Castro, G., & Siow, S. (2021). jtracer:\n")
 cat("An R interface to jTRACE [Computer software]. GitHub.\n")
 cat("https://github.com/gongcastro/jtracer\n")
